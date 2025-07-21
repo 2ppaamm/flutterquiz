@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>All Gifted Math</title>
+    <meta name="description" content="A Duolingo-style math app">
+    <meta name="theme-color" content="#960000">
+    <meta name="flutter-web-renderer" content="html">
+    <base href="/">
+    <link rel="manifest" href="manifest.json">
+    <script src="flutter.js"></script>
+  </head>
+  <body>
+    <script>
+      window.addEventListener('load', function () {
+        if (!_flutter || !_flutter.loader) {
+          console.error("Flutter loader not available.");
+          return;
+        }
+
+        _flutter.loader.load({
+          entrypointUrl: "main.dart.js",
+          buildConfig: {
+            canvasKitBaseUrl: "./canvaskit/"
+          },
+          onEntrypointLoaded: function (engineInitializer) {
+            engineInitializer.initializeEngine().then(function (appRunner) {
+              appRunner.runApp();
+            });
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

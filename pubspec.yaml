@@ -1,0 +1,45 @@
+name: ag_math
+description: All Gifted Math
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  http: ^1.3.0
+  intl_phone_field: ^3.2.0
+  shared_preferences: ^2.2.2
+  rive: ^0.13.20
+  video_player: ^2.7.2
+  lottie: ^2.7.0
+
+  flutter_html: ^3.0.0
+  flutter_html_math: ^3.0.0
+  flutter_math_fork: ^0.7.0
+  flutter_spinbox: ^0.13.1
+  flutter_stripe: ^11.5.0
+  google_fonts: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/character1.png
+    - assets/character2.png
+    - assets/logo.png
+    - assets/octopus.png
+    - assets/kudo.png
+    - assets/rubick_hover.riv
+    - assets/animations/placeholder.json
+    - assets/animations/octo.gif
+    - assets/animations/fireworks.json
+    - assets/animations/heart.json
+    - assets/animations/octo2.gif    
