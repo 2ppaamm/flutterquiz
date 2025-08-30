@@ -1,57 +1,106 @@
-// lib/theme/app_input_styles.dart
-
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_font_styles.dart';
 
 class AppInputStyles {
-  static final type2primary = InputDecoration(
-    filled: true,
-    fillColor: AppColors.lightGrey,
-    hintText: 'Type your answer here',
-    hintStyle: AppFontStyles.inputPlaceholder,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8.56),
-      borderSide: BorderSide(color: AppColors.tileGrey),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8.56),
-      borderSide: BorderSide(color: AppColors.tileGrey),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8.56),
-      borderSide: BorderSide(color: AppColors.darkGrey, width: 1),
-    ),
-  );
-
-  static InputDecoration general(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: AppFontStyles.inputPlaceholder,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.56),
-          borderSide: BorderSide(color: AppColors.tileGrey),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.56),
-          borderSide: BorderSide(color: AppColors.tileGrey),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.56),
-          borderSide: BorderSide(color: AppColors.darkGrey),
-        ),
-      );
-
-  static BoxDecoration type2Place({bool isActive = false}) {
-    return BoxDecoration(
-      color: isActive ? AppColors.gold : AppColors.tileGrey,
-      borderRadius: BorderRadius.circular(8.56),
-      border: Border.all(
-        color: isActive ? Colors.orange : Colors.grey,
-        width: 1.5,
+  // Base input decoration
+  static InputDecoration _baseDecoration() {
+    return InputDecoration(
+      filled: true,
+      fillColor: AppColors.inputBackground,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.inputInactive),
       ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.inputInactive),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.inputActive, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.error, width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.error, width: 2),
+      ),
+    );
+  }
+
+  // General input field style
+  static InputDecoration general(String hintText) {
+    return _baseDecoration().copyWith(
+      hintText: hintText,
+      hintStyle: AppFontStyles.bodyMedium.copyWith(
+        color: AppColors.darkGreyText,
+      ),
+    );
+  }
+
+  // Email input style
+  static InputDecoration email() {
+    return general('Email address').copyWith(
+      prefixIcon: Icon(Icons.email_outlined, color: AppColors.darkGreyText),
+    );
+  }
+
+  // Phone input style
+  static InputDecoration phone() {
+    return general('Phone number').copyWith(
+      prefixIcon: Icon(Icons.phone_outlined, color: AppColors.darkGreyText),
+    );
+  }
+
+  // Password input style
+  static InputDecoration password({bool obscureText = true}) {
+    return general('Password').copyWith(
+      prefixIcon: Icon(Icons.lock_outlined, color: AppColors.darkGreyText),
+      suffixIcon: Icon(
+        obscureText ? Icons.visibility_off : Icons.visibility,
+        color: AppColors.darkGreyText,
+      ),
+    );
+  }
+
+  // OTP input style
+  static InputDecoration otp() {
+    return _baseDecoration().copyWith(
+      hintText: 'Enter OTP',
+      hintStyle: AppFontStyles.bodyMedium.copyWith(
+        color: AppColors.darkGreyText,
+      ),
+      counterText: '',
+    );
+  }
+
+  // Search input style
+  static InputDecoration search(String hintText) {
+    return _baseDecoration().copyWith(
+      hintText: hintText,
+      hintStyle: AppFontStyles.bodyMedium.copyWith(
+        color: AppColors.darkGreyText,
+      ),
+      prefixIcon: Icon(Icons.search, color: AppColors.darkGreyText),
+      fillColor: AppColors.white,
+    );
+  }
+
+  // Date input style
+  static InputDecoration date() {
+    return general('Date of Birth (YYYY-MM-DD)').copyWith(
+      prefixIcon: Icon(Icons.calendar_today_outlined, color: AppColors.darkGreyText),
+    );
+  }
+
+  // Name input style
+  static InputDecoration name(String label) {
+    return general(label).copyWith(
+      prefixIcon: Icon(Icons.person_outlined, color: AppColors.darkGreyText),
     );
   }
 }

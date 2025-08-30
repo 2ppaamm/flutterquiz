@@ -19,7 +19,7 @@ dependencies:
 
   flutter_html: ^3.0.0
   flutter_html_math: ^3.0.0
-  flutter_math_fork: ^0.7.0
+  flutter_math_fork: ^0.7.4
   flutter_spinbox: ^0.13.1
   flutter_stripe: ^11.5.0
   google_fonts: ^6.1.0
@@ -35,7 +35,6 @@ flutter:
     - assets/character1.png
     - assets/character2.png
     - assets/logo.png
-    - assets/octopus.png
     - assets/kudo.png
     - assets/rubick_hover.riv
     - assets/animations/placeholder.json

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_button_styles.dart';
 import '../theme/app_font_styles.dart';
 import '../theme/app_colors.dart';
 import 'bottom_nav_screen.dart';
 
-class ResultsScreen extends StatelessWidget {
+class ResultsScreen extends StatefulWidget {
   final int kudos;
   final double maxile;
   final double percentage;
@@ -26,231 +27,280 @@ class ResultsScreen extends StatelessWidget {
     required this.encouragement,
   });
 
-  String formatDuration(int seconds) {
-    final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
-    final secs = (seconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$secs';
+  @override
+  State<ResultsScreen> createState() => _ResultsScreenState();
+}
+
+class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateMixin {
+  late AnimationController _progressAnimationController;
+  late AnimationController _statsAnimationController;
+  late Animation<double> _progressAnimation;
+  late Animation<double> _statsAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupAnimations();
+    _updateUserStats();
   }
 
-  static final List<String> praiseWords = [
-    'Nice Work',
-    'Excellent',
-    'Well Done',
-    'You Rock',
-    'Amazing Effort',
-    'Great Job',
-    'Bravo',
-    'You Did It',
-    'Awesome',
-    'Superb',
-    'Fantastic',
-    'Brilliant',
-    'Impressive',
-    'Kudos!',
-    'Terrific',
-    'Way to Go',
-    'Outstanding',
-    'Keep It Up',
-    'Top Notch',
-    'Magnificent'
-  ];
+  void _setupAnimations() {
+    _progressAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+    
+    _statsAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
 
-  static final List<String> encouragementWords = [
-    'Good Try',
-    'Keep Practicing',
-    'Don’t Give Up',
-    'Progress Takes Time',
-    'You’re Getting There',
-    'Stay Focused',
-    'Keep Working At It',
-    'Challenge Makes You Stronger',
-    'Every Step Counts',
-    'Room to Improve',
-    'Almost There',
-    'Keep Going',
-    'Practice More',
-    'Stay Positive',
-    'You Can Do Better',
-    'Let’s Try Again',
-    'Small Wins Matter',
-    'Learn and Grow',
-    'Keep Moving Forward',
-    'Try Another Round'
-  ];
+    _progressAnimation = Tween<double>(begin: 0.0, end: widget.percentage / 100).animate(
+      CurvedAnimation(parent: _progressAnimationController, curve: Curves.easeOut),
+    );
+    
+    _statsAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _statsAnimationController, curve: Curves.elasticOut),
+    );
 
-  String getMessage(double percentage) {
-    final index = DateTime.now().second % 20;
-    return percentage >= 50 ? praiseWords[index] : encouragementWords[index];
+    // Start animations
+    _progressAnimationController.forward();
+    _statsAnimationController.forward();
+  }
+
+  Future<void> _updateUserStats() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('game_level', widget.kudos);
+    await prefs.setInt('maxile_level', widget.maxile.toInt());
+  }
+
+  String _formatTime(int seconds) {
+    final minutes = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+
+  String _getMessage(double percentage) {
+    if (percentage >= 90) return 'Outstanding';
+    if (percentage >= 80) return 'Great Job';
+    if (percentage >= 70) return 'Well Done';
+    if (percentage >= 60) return 'Good Work';
+    if (percentage >= 50) return 'Nice Try';
+    return 'Keep Practicing';
+  }
+
+  @override
+  void dispose() {
+    _progressAnimationController.dispose();
+    _statsAnimationController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final double progress = percentage / 100;
-    final String message = getMessage(percentage);
-
     return Scaffold(
       backgroundColor: AppColors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Center(
-                  child: Image.asset('assets/character2.png', height: 284),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 40),
+              
+              // Header Section
+              Text(
+                '${_getMessage(widget.percentage)},',
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1F2937),
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  '$message,',
-                  style: AppFontStyles.greeting,
+                textAlign: TextAlign.center,
+              ),
+              
+              const SizedBox(height: 8),
+              
+              Text(
+                widget.name,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF960000),
                 ),
-                Text(
-                  '$name!',
-                  style: AppFontStyles.name,
-                ),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 12,
-                      backgroundColor: Colors.grey[300],
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFF7C2D12)),
+              ),
+              
+              const SizedBox(height: 40),
+
+              // Score Display
+              AnimatedBuilder(
+                animation: _progressAnimation,
+                builder: (context, child) {
+                  return Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.08),
+                          spreadRadius: 0,
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text('You got ${percentage.toStringAsFixed(1)}% right',
-                    style: AppFontStyles.heading3),
-                const SizedBox(height: 24),
-
-                // Animated Row: Time, Kudos, Maxile
-                TweenAnimationBuilder(
-                  tween: Tween<double>(begin: 0, end: kudos.toDouble()),
-                  duration: const Duration(seconds: 2),
-                  builder: (context, double animatedKudos, child) {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    child: Column(
                       children: [
-                        // Time
-                        Flexible(
-                          child: TweenAnimationBuilder(
-                            tween: Tween<double>(
-                                begin: 0, end: durationInSeconds.toDouble()),
-                            duration: const Duration(seconds: 2),
-                            builder: (context, double animatedTime, child) {
-                              return Column(
-                                children: [
-                                  const Icon(Icons.timer_outlined, size: 28),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    formatDuration(animatedTime.toInt()),
-                                    style: AppFontStyles.heading4,
-                                  ),
-                                  const Text('Time taken'),
-                                ],
-                              );
-                            },
+                        Text(
+                          '${(_progressAnimation.value * 100).toInt()}%',
+                          style: const TextStyle(
+                            fontSize: 48,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF960000),
                           ),
                         ),
-
-                        // Kudos (center with image)
-                        Flexible(
-                          child: Column(
-                            children: [
-                              Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Image.asset(
-                                    'assets/kudo.png',
-                                    height: 72,
-                                    width: 72,
-                                    fit: BoxFit.contain,
-                                  ),
-                                  Text(
-                                    '${animatedKudos.toInt()}',
-                                    style: AppFontStyles.heading2,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Kudos earned',
-                                style: TextStyle(fontSize: 14),
-                              ),
-                            ],
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Questions Correct',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Color(0xFF6B7280),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-
-                        // Maxile
-                        Flexible(
-                          child: TweenAnimationBuilder(
-                            tween: Tween<double>(begin: 0, end: maxile),
-                            duration: const Duration(seconds: 2),
-                            builder: (context, double animatedMaxile, child) {
-                              return Column(
-                                children: [
-                                  const Icon(Icons.leaderboard_outlined,
-                                      size: 28),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    animatedMaxile.toStringAsFixed(2),
-                                    style: AppFontStyles.heading4,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    encouragement,
-                                    style: AppFontStyles.greeting,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              );
-                            },
+                        const SizedBox(height: 16),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: _progressAnimation.value,
+                            minHeight: 8,
+                            backgroundColor: const Color(0xFFE5E7EB),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              widget.percentage >= 80 ? Colors.green : 
+                              widget.percentage >= 60 ? Colors.orange : 
+                              const Color(0xFF960000),
+                            ),
                           ),
                         ),
                       ],
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
+              ),
 
-                const SizedBox(height: 32),
-                ElevatedButton(
+              const SizedBox(height: 32),
+
+              // Stats Row
+              AnimatedBuilder(
+                animation: _statsAnimation,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _statsAnimation.value,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            Icons.timer_outlined,
+                            _formatTime(widget.durationInSeconds),
+                            'Time',
+                            Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildStatCard(
+                            Icons.stars,
+                            widget.kudos.toString(),
+                            'Kudos',
+                            const Color(0xFF960000),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildStatCard(
+                            Icons.trending_up,
+                            widget.maxile.toInt().toString(),
+                            'Maxile',
+                            Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
+              const Spacer(),
+
+              // Single Clear Action Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pushReplacement(
+                    Navigator.pushAndRemoveUntil(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => BottomNavScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => BottomNavScreen()),
+                      (route) => false,
                     );
                   },
-                  style: AppButtonStyles.primary,
-                  child: const Text('Continue'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF960000),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Back to Home',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/');
-                  },
-                  style: AppButtonStyles.secondary,
-                  child: const Text('Finish'),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/subject-select');
-                  },
-                  style: AppButtonStyles.tertiary,
-                  child: const Text('Subject Select'),
-                ),
-              ],
-            ),
+              ),
+
+              const SizedBox(height: 32),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(IconData icon, String value, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

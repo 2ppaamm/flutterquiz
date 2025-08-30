@@ -5,15 +5,11 @@ import 'dart:convert';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'results_screen.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_button_styles.dart';
 import '../theme/app_font_styles.dart';
-import '../services/answer_service.dart';
-import '../../config.dart';
-import '../widgets/platform_network_image.dart'; // make sure this import is added
+import '../theme/app_button_styles.dart';
+import '../widgets/platform_network_image.dart';
 import 'bottom_nav_screen.dart';
-import '../widgets/question_header.dart';
-import '../widgets/num_input_pad.dart';
-import '../theme/app_input_styles.dart';
+import '../../config.dart';
 
 class QuestionScreen extends StatefulWidget {
   final int trackId;
@@ -33,78 +29,1044 @@ class QuestionScreen extends StatefulWidget {
   State<QuestionScreen> createState() => _QuestionScreenState();
 }
 
-class _QuestionScreenState extends State<QuestionScreen> {
+class _QuestionScreenState extends State<QuestionScreen> with TickerProviderStateMixin {
   late DateTime startTime;
+  int currentIndex = 0;
   int lives = 5;
-  bool noLivesLeft = false;
+  bool hasAnswered = false;
+  bool isCorrect = false;
+  String? selectedAnswer;
+  Map<String, String> fillInAnswers = {};
+  String activeInputField = '';
+  
+  late AnimationController _feedbackAnimationController;
+  late Animation<double> _feedbackScaleAnimation;
+  late AnimationController _progressAnimationController;
+  late Animation<double> _progressAnimation;
+
+  List<int> submittedQuestionIds = [];
+  List<dynamic> submittedAnswers = [];
 
   @override
   void initState() {
     super.initState();
-    if (widget.questions.isNotEmpty && widget.questions[0]['type_id'] == 2) {
-      activeInputId = 'input_0';
-    }
     startTime = DateTime.now();
-    _loadKudos();
-    _loadState();
+    _setupAnimations();
+    _loadUserData();
+    _resetQuestionState();
+    _initializeQuestion();
   }
 
-  void _loadKudos() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      kudos = prefs.getInt('game_level') ?? 0;
-    });
+  void _setupAnimations() {
+    _feedbackAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _feedbackScaleAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
+      CurvedAnimation(parent: _feedbackAnimationController, curve: Curves.elasticOut),
+    );
+
+    _progressAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _progressAnimationController, curve: Curves.easeOut),
+    );
+    
+    _progressAnimationController.forward();
   }
 
-  Future<void> _loadState() async {
+  Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      kudos = prefs.getInt('game_level') ?? 0;
       lives = prefs.getInt('lives') ?? 5;
-      noLivesLeft = lives < 1;
     });
   }
 
-  Future<void> _reduceLife() async {
-    final prefs = await SharedPreferences.getInstance();
-    int lives = prefs.getInt('lives') ?? 5; // Default to 5 if not found
-    if (lives > 0) {
-      lives--;
-      await prefs.setInt('lives', lives);
-      debugPrint('Life lost. Remaining: $lives');
+  void _resetQuestionState() {
+    currentIndex = 0;
+    hasAnswered = false;
+    isCorrect = false;
+    selectedAnswer = null;
+    fillInAnswers.clear();
+    activeInputField = '';
+    submittedQuestionIds.clear();
+    submittedAnswers.clear();
+  }
+
+  void _initializeQuestion() {
+    final currentQuestion = widget.questions[currentIndex];
+    if (currentQuestion['type_id'] == 2) {
+      activeInputField = 'input_0';
     }
   }
 
-  List<int> submittedQuestionIds = [];
-  List<dynamic> submittedAnswers = [];
-  int currentIndex = 0;
-  bool submitted = false;
-  bool isCorrect = false;
-  int attempts = 0;
-  String? selectedOption;
-  List<Map<String, dynamic>> collectedAnswers = [];
-  Map<String, String> fibAnswers = {};
-  String activeInputId = '';
-
-  String getPrimaryLevel(String trackName) {
-    final match = RegExp(r'Primary\s?(\d+)').firstMatch(trackName);
-    return match != null ? match.group(1) ?? '' : '';
+  void _showVideoDialog() {
+    final question = widget.questions[currentIndex];
+    final videos = question['videos'];
+    
+    if (videos == null || videos.toString().isEmpty) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Help Video', style: AppFontStyles.headingMedium),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.play_circle_outline, size: 64, color: AppColors.darkRed),
+            const SizedBox(height: 16),
+            Text(
+              'Watch this video to help understand the concept.',
+              style: AppFontStyles.bodyMedium.copyWith(color: AppColors.darkGreyText),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: AppFontStyles.buttonSecondary),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Video player will be implemented')),
+              );
+            },
+            style: AppButtonStyles.primary,
+            child: const Text('Watch Video'),
+          ),
+        ],
+      ),
+    );
   }
 
-  int kudos = 0;
-  final double answerAreaHeight = 320.0;
+  void _showExitDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Exit Practice?', style: AppFontStyles.headingMedium),
+        content: Text('Your progress will be lost if you exit now.', 
+                     style: AppFontStyles.bodyMedium),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Stay', style: AppFontStyles.buttonSecondary),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => BottomNavScreen()),
+              );
+            },
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: Text('Exit', style: AppFontStyles.buttonSecondary.copyWith(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+  }
 
-  String preprocessLatex(String content) {
-    final regex = RegExp(r'\\$\\$(.+?)\\$\\$', dotAll: true);
-    return content.replaceAllMapped(regex, (match) {
-      final latex = match.group(1);
-      return '<tex>${latex ?? ''}</tex>';
-    });
+  Widget _buildHeader() {
+    final progress = (currentIndex + 1) / widget.questions.length;
+    final question = widget.questions[currentIndex];
+    final hasVideo = question['videos'] != null && question['videos'].toString().isNotEmpty;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.black.withOpacity(0.05),
+            offset: const Offset(0, 2),
+            blurRadius: 4,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: Icon(Icons.close, size: 24, color: AppColors.darkGrey),
+                onPressed: _showExitDialog,
+              ),
+              if (hasVideo)
+                IconButton(
+                  icon: Icon(Icons.play_circle_outline, size: 28, color: AppColors.darkRed),
+                  onPressed: _showVideoDialog,
+                ),
+              Row(
+                children: List.generate(lives, (index) => 
+                  Container(
+                    margin: const EdgeInsets.only(left: 4),
+                    child: Icon(
+                      Icons.favorite,
+                      color: AppColors.error,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          AnimatedBuilder(
+            animation: _progressAnimation,
+            builder: (context, child) {
+              return LinearProgressIndicator(
+                value: progress * _progressAnimation.value,
+                backgroundColor: AppColors.progressInactive,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.progressActive),
+                minHeight: 6,
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Question ${currentIndex + 1} of ${widget.questions.length}',
+            style: AppFontStyles.caption.copyWith(color: AppColors.darkGreyText),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _renderQuestionText(String text) {
+    final spans = <InlineSpan>[];
+    final regex = RegExp(r'\$\$(.*?)\$\$|<input[^>]*>|<br\s*/?>|<hr\s*/?>|<hr>', dotAll: true);
+    final matches = regex.allMatches(text);
+    
+    int lastEnd = 0;
+    int inputCounter = 0;
+    
+    for (final match in matches) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: text.substring(lastEnd, match.start),
+          style: AppFontStyles.bodyLarge.copyWith(color: AppColors.black),
+        ));
+      }
+      
+      final matchText = match.group(0) ?? '';
+      
+      if (matchText.startsWith(r'$$')) {
+        final latex = match.group(1) ?? '';
+        spans.add(WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Math.tex(latex, textStyle: AppFontStyles.bodyLarge),
+        ));
+      } else if (matchText.startsWith('<input')) {
+        final inputId = 'input_$inputCounter';
+        inputCounter++;
+        
+        spans.add(WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                activeInputField = inputId;
+              });
+            },
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              constraints: const BoxConstraints(minWidth: 60),
+              decoration: BoxDecoration(
+                color: activeInputField == inputId 
+                  ? AppColors.inputActive.withOpacity(0.1) 
+                  : AppColors.inputBackground,
+                border: Border.all(
+                  color: activeInputField == inputId 
+                    ? AppColors.inputActive 
+                    : AppColors.inputInactive,
+                  width: activeInputField == inputId ? 2 : 1,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                fillInAnswers[inputId] ?? '____',
+                style: AppFontStyles.bodyMedium.copyWith(
+                  color: fillInAnswers[inputId]?.isEmpty ?? true 
+                    ? AppColors.darkGreyText 
+                    : AppColors.black,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ));
+      } else if (matchText.contains('<br') || matchText.contains('<hr')) {
+        spans.add(const TextSpan(text: '\n'));
+      }
+      
+      lastEnd = match.end;
+    }
+    
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastEnd),
+        style: AppFontStyles.bodyLarge.copyWith(color: AppColors.black),
+      ));
+    }
+    
+    return RichText(
+      text: TextSpan(children: spans.isEmpty 
+        ? [TextSpan(text: text, style: AppFontStyles.bodyLarge.copyWith(color: AppColors.black))]
+        : spans),
+      textAlign: TextAlign.left,
+    );
+  }
+
+  Widget _buildQuestion() {
+    final question = widget.questions[currentIndex];
+    final questionText = question['question'] ?? '';
+    final hasImage = question['question_image'] != null;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: hasImage 
+        ? _buildQuestionWithImage(question, questionText)
+        : _buildQuestionWithoutImage(questionText),
+    );
+  }
+
+  Widget _buildQuestionWithImage(Map<String, dynamic> question, String questionText) {
+    final typeId = question['type_id'];
+    
+    if (typeId == 2) {
+      return _buildFIBWithImageLayout(question, questionText);
+    } else {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            constraints: const BoxConstraints(minHeight: 60),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.lightGrey,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.inputInactive),
+            ),
+            child: renderHtmlWithLatex(questionText),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          Container(
+            constraints: const BoxConstraints(minHeight: 200, maxHeight: 300),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.black.withOpacity(0.1),
+                  spreadRadius: 0,
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                color: AppColors.white,
+                width: double.infinity,
+                child: PlatformNetworkImage(
+                  imageUrl: "${AppConfig.apiBaseUrl}${question['question_image']}",
+                  width: double.infinity,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+  }
+
+  Widget _buildFIBWithImageLayout(Map<String, dynamic> question, String questionText) {
+    final inputMatches = RegExp(r'<input[^>]*>').allMatches(questionText);
+    final inputCount = inputMatches.length;
+    
+    return Column(
+      children: [
+        Container(
+          height: 250,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.lightGrey),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.black.withOpacity(0.1),
+                spreadRadius: 0,
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: PlatformNetworkImage(
+              imageUrl: "${AppConfig.apiBaseUrl}${question['question_image']}",
+              width: double.infinity,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.darkRed.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.darkRed.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _renderQuestionWithInlineAnswers(questionText, inputCount),
+              
+              if (inputCount > 1) ...[
+                const SizedBox(height: 16),
+                _buildAnswerProgress(inputCount),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFIBWithoutImageLayout(String questionText) {
+    final inputMatches = RegExp(r'<input[^>]*>').allMatches(questionText);
+    final inputCount = inputMatches.length;
+    
+    return Container(
+      constraints: const BoxConstraints(minHeight: 300),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.inputInactive, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.black.withOpacity(0.08),
+            spreadRadius: 0,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _renderQuestionWithInlineAnswers(questionText, inputCount),
+          
+          if (inputCount > 1) ...[
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.darkRed.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.darkRed.withOpacity(0.2)),
+              ),
+              child: _buildAnswerProgress(inputCount),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _renderQuestionWithInlineAnswers(String questionText, int inputCount) {
+    final regex = RegExp(r'(\$\$.+?\$\$|<input[^>]*>|<br\s*/?>|<hr>)', dotAll: true);
+    final matches = regex.allMatches(questionText);
+
+    List<Widget> widgets = [];
+    int currentIndex = 0;
+    int inputCounter = 0;
+
+    for (final match in matches) {
+      final start = match.start;
+      final end = match.end;
+      final matchedText = questionText.substring(start, end);
+
+      if (start > currentIndex) {
+        final text = questionText.substring(currentIndex, start);
+        if (text.trim().isNotEmpty) {
+          widgets.add(
+            Text(
+              text,
+              style: AppFontStyles.bodyLarge.copyWith(color: AppColors.black),
+            ),
+          );
+        }
+      }
+
+      if (matchedText.startsWith('<input')) {
+        final inputId = 'input_$inputCounter';
+        inputCounter++;
+        
+        widgets.add(
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: _buildInlineAnswerField(inputId, inputCounter),
+          ),
+        );
+        
+        if (activeInputField.isEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            setState(() {
+              activeInputField = inputId;
+            });
+          });
+        }
+      } else if (matchedText.contains('<br') || matchedText.contains('<hr')) {
+        widgets.add(const SizedBox(height: 8));
+      }
+
+      currentIndex = end;
+    }
+
+    if (currentIndex < questionText.length) {
+      final trailing = questionText.substring(currentIndex).trim();
+      if (trailing.isNotEmpty) {
+        widgets.add(
+          Text(
+            trailing,
+            style: AppFontStyles.bodyLarge.copyWith(color: AppColors.black),
+          ),
+        );
+      }
+    }
+
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: widgets,
+    );
+  }
+
+  Widget _buildInlineAnswerField(String inputId, int fieldNumber) {
+    final isActive = activeInputField == inputId;
+    final hasAnswer = fillInAnswers[inputId]?.isNotEmpty ?? false;
+    
+    return GestureDetector(
+      onTap: () => setState(() => activeInputField = inputId),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 80),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive 
+            ? AppColors.darkRed.withOpacity(0.1)
+            : AppColors.white,
+          border: Border.all(
+            color: hasAnswer 
+              ? AppColors.success
+              : isActive 
+                ? AppColors.darkRed
+                : AppColors.inputInactive,
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: hasAnswer 
+                  ? AppColors.success
+                  : isActive 
+                    ? AppColors.darkRed
+                    : AppColors.inputInactive,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  fieldNumber.toString(),
+                  style: AppFontStyles.caption.copyWith(
+                    color: AppColors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              fillInAnswers[inputId]?.isEmpty ?? true 
+                ? '?' 
+                : fillInAnswers[inputId]!,
+              style: AppFontStyles.bodyMedium.copyWith(
+                fontWeight: FontWeight.w600,
+                color: hasAnswer 
+                  ? AppColors.success
+                  : isActive 
+                    ? AppColors.darkRed
+                    : AppColors.darkGreyText,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnswerProgress(int totalFields) {
+    final completedCount = fillInAnswers.values.where((v) => v.isNotEmpty).length;
+    
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.inputInactive),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.assignment_turned_in_outlined,
+            size: 16,
+            color: AppColors.darkGreyText,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Progress: $completedCount/$totalFields answers',
+            style: AppFontStyles.caption.copyWith(
+              color: AppColors.darkGreyText,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const Spacer(),
+          if (completedCount == totalFields)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.success.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Complete!',
+                style: AppFontStyles.caption.copyWith(
+                  color: AppColors.success,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuestionWithoutImage(String questionText) {
+    final question = widget.questions[currentIndex];
+    final typeId = question['type_id'];
+    
+    if (typeId == 2) {
+      // FIB question without image - use clean layout similar to FIB with image
+      return _buildFIBWithoutImageLayout(questionText);
+    } else {
+      // MCQ question without image - use existing layout
+      return Container(
+        constraints: const BoxConstraints(minHeight: 300),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.inputInactive, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.black.withOpacity(0.08),
+              spreadRadius: 0,
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Center(
+          child: AnimatedBuilder(
+            animation: _feedbackScaleAnimation,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _feedbackScaleAnimation.value,
+                child: renderHtmlWithLatex(questionText),
+              );
+            },
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildAnswerArea() {
+    final question = widget.questions[currentIndex];
+    final typeId = question['type_id'];
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: typeId == 1 ? _buildMultipleChoiceAnswers(question) : _buildFillInBlankAnswers(question),
+    );
+  }
+
+  Widget _buildMultipleChoiceAnswers(Map<String, dynamic> question) {
+    final answers = <String>[];
+    final answerImages = <String?>[];
+    bool hasAnyImages = false;
+    
+    for (int i = 0; i < 4; i++) {
+      final answer = question['answer$i'];
+      final answerImage = question['answer${i}_image'];
+      
+      if (answer != null && answer.toString().isNotEmpty) {
+        answers.add(answer.toString());
+        answerImages.add(answerImage?.toString());
+        if (answerImage != null && answerImage.toString().isNotEmpty) {
+          hasAnyImages = true;
+        }
+      }
+    }
+    
+    if (hasAnyImages) {
+      // Grid layout for answers with images
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 1.0,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: answers.length,
+        itemBuilder: (context, index) => _buildImageAnswerOption(
+          answers[index], 
+          answerImages[index],
+          index,
+        ),
+      );
+    } else {
+      // Vertical stack layout for text-only answers
+      return Column(
+        children: answers.map((answer) => _buildAnswerOption(answer)).toList(),
+      );
+    }
+  }
+
+  Widget _buildAnswerOption(String answer) {
+    final isSelected = selectedAnswer == answer;
+    final showResult = hasAnswered;
+    final isCorrectAnswer = _isCorrectAnswer(answer);
+    
+    Color backgroundColor = AppColors.white;
+    Color borderColor = AppColors.inputInactive;
+    
+    if (showResult && isSelected) {
+      backgroundColor = isCorrect ? AppColors.success.withOpacity(0.1) : AppColors.error.withOpacity(0.1);
+      borderColor = isCorrect ? AppColors.success : AppColors.error;
+    } else if (showResult && isCorrectAnswer && !isCorrect) {
+      backgroundColor = AppColors.success.withOpacity(0.1);
+      borderColor = AppColors.success;
+    } else if (isSelected) {
+      backgroundColor = AppColors.darkRed.withOpacity(0.1);
+      borderColor = AppColors.darkRed;
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: hasAnswered ? null : () => _selectAnswer(answer),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor, width: 2),
+            ),
+            child: Row(
+              children: [
+                Expanded(child: _renderQuestionText(answer)),
+                if (showResult && isSelected && isCorrect)
+                  Icon(Icons.check_circle, color: AppColors.success, size: 24),
+                if (showResult && isSelected && !isCorrect)
+                  Icon(Icons.cancel, color: AppColors.error, size: 24),
+                if (showResult && isCorrectAnswer && !isCorrect && !isSelected)
+                  Icon(Icons.check_circle, color: AppColors.success, size: 24),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageAnswerOption(String answer, String? answerImage, int optionIndex) {
+    final isSelected = selectedAnswer == answer;
+    final showResult = hasAnswered;
+    final isCorrectAnswer = _isCorrectAnswer(answer);
+    
+    Color backgroundColor = AppColors.white;
+    Color borderColor = AppColors.inputInactive;
+    
+    if (showResult && isSelected) {
+      backgroundColor = isCorrect ? AppColors.success.withOpacity(0.1) : AppColors.error.withOpacity(0.1);
+      borderColor = isCorrect ? AppColors.success : AppColors.error;
+    } else if (showResult && isCorrectAnswer && !isCorrect) {
+      backgroundColor = AppColors.success.withOpacity(0.1);
+      borderColor = AppColors.success;
+    } else if (isSelected) {
+      backgroundColor = AppColors.darkRed.withOpacity(0.1);
+      borderColor = AppColors.darkRed;
+    }
+    
+    return Material(
+      color: backgroundColor,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: hasAnswered ? null : () => _selectAnswer(answer),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: borderColor, width: 2),
+          ),
+          child: Column(
+            children: [
+              // Image section
+              if (answerImage != null && answerImage.isNotEmpty)
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                      child: PlatformNetworkImage(
+                        imageUrl: "${AppConfig.apiBaseUrl}$answerImage",
+                        width: double.infinity,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+              
+              // Text/Label section
+              Expanded(
+                flex: 1,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            answer,
+                            style: AppFontStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.black,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      if (showResult && isSelected && isCorrect)
+                        Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                      if (showResult && isSelected && !isCorrect)
+                        Icon(Icons.cancel, color: AppColors.error, size: 20),
+                      if (showResult && isCorrectAnswer && !isCorrect && !isSelected)
+                        Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFillInBlankAnswers(Map<String, dynamic> question) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.inputInactive),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.black.withOpacity(0.1),
+            spreadRadius: 0,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          if (activeInputField.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.darkRed.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: AppColors.darkRed,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        _getInputFieldNumber(activeInputField),
+                        style: AppFontStyles.caption.copyWith(
+                          color: AppColors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Answer ${_getInputFieldNumber(activeInputField)}:',
+                          style: AppFontStyles.caption.copyWith(
+                            color: AppColors.darkGreyText,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          fillInAnswers[activeInputField]?.isEmpty ?? true 
+                            ? 'Tap numbers to enter' 
+                            : fillInAnswers[activeInputField]!,
+                          style: AppFontStyles.bodyMedium.copyWith(
+                            color: AppColors.darkRed,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        fillInAnswers[activeInputField] = '';
+                      });
+                    },
+                    child: Text('Clear', style: AppFontStyles.caption),
+                  ),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 16),
+
+          Column(
+            children: [
+              Row(
+                children: ['1', '2', '3', '⌫'].map((value) => 
+                  Expanded(child: _buildKeypadButton(value))
+                ).toList(),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: ['4', '5', '6', ':'].map((value) => 
+                  Expanded(child: _buildKeypadButton(value))
+                ).toList(),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: ['7', '8', '9', '.'].map((value) => 
+                  Expanded(child: _buildKeypadButton(value))
+                ).toList(),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(flex: 2, child: _buildKeypadButton('0')),
+                  const Expanded(child: SizedBox()),
+                  const Expanded(child: SizedBox()),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKeypadButton(String value) {
+    final isBackspace = value == '⌫';
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      child: Material(
+        color: isBackspace ? AppColors.tileGrey : AppColors.inputBackground,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => _handleKeypadInput(value),
+          child: Container(
+            height: 44,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.inputInactive, width: 0.5),
+            ),
+            child: Center(
+              child: isBackspace
+                ? Icon(Icons.backspace_outlined, size: 18, color: AppColors.darkGreyText)
+                : Text(
+                    value,
+                    style: AppFontStyles.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.black,
+                    ),
+                  ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getInputFieldNumber(String fieldId) {
+    final parts = fieldId.split('_');
+    if (parts.length >= 2) {
+      final number = int.tryParse(parts[1]) ?? 0;
+      return (number + 1).toString();
+    }
+    return '1';
   }
 
   Widget renderHtmlWithLatex(String content) {
-    final regex =
-        RegExp(r'(\$\$.+?\$\$|<input[^>]*>|<br\s*/?>|<hr>)', dotAll: true);
+    final regex = RegExp(r'(\$\$.+?\$\$|<input[^>]*>|<br\s*/?>|<hr>)', dotAll: true);
     final matches = regex.allMatches(content);
 
     List<InlineSpan> spans = [];
@@ -116,22 +1078,20 @@ class _QuestionScreenState extends State<QuestionScreen> {
       final end = match.end;
       final matchedText = content.substring(start, end);
 
-      // Add plain text before the match
       if (start > currentIndex) {
         spans.add(TextSpan(
           text: content.substring(currentIndex, start),
-          style: AppFontStyles.questionText,
+          style: AppFontStyles.bodyLarge.copyWith(color: AppColors.black),
         ));
       }
 
-      if (matchedText.startsWith(r'$$') && matchedText.endsWith(r'$$')) {
-        // LaTeX math
+      if (matchedText.startsWith(r'$') && matchedText.endsWith(r'$')) {
         final latex = matchedText.substring(2, matchedText.length - 2);
         spans.add(WidgetSpan(
           alignment: PlaceholderAlignment.middle,
           child: Math.tex(
             latex,
-            textStyle: const TextStyle(fontSize: 18),
+            textStyle: AppFontStyles.bodyLarge,
           ),
         ));
       } else if (matchedText.startsWith('<input')) {
@@ -143,49 +1103,55 @@ class _QuestionScreenState extends State<QuestionScreen> {
           child: GestureDetector(
             onTap: () {
               setState(() {
-                activeInputId = id;
+                activeInputField = id;
               });
             },
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               constraints: const BoxConstraints(minWidth: 60),
-              decoration:
-                  AppInputStyles.type2Place(isActive: activeInputId == id),
+              decoration: BoxDecoration(
+                color: activeInputField == id 
+                  ? AppColors.inputActive.withOpacity(0.1) 
+                  : AppColors.white,
+                border: Border.all(
+                  color: activeInputField == id 
+                    ? AppColors.inputActive 
+                    : AppColors.inputActive.withOpacity(0.3),
+                  width: activeInputField == id ? 2 : 1,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
               child: Text(
-                fibAnswers[id] ?? '',
-                style: AppFontStyles.questionText,
+                fillInAnswers[id]?.isEmpty ?? true 
+                  ? '____' 
+                  : fillInAnswers[id]!,
+                style: AppFontStyles.bodyMedium.copyWith(
+                  color: fillInAnswers[id]?.isEmpty ?? true 
+                    ? AppColors.darkGreyText
+                    : AppColors.darkRed,
+                  fontWeight: FontWeight.w600,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
           ),
         ));
-      } else if (matchedText == '<br>' ||
-          matchedText == '<br/>' ||
-          matchedText == '<br />') {
-        spans.add(TextSpan(
-          text: '\n',
-          style: TextStyle(height: 1.5), // Adjust height as needed
-        ));
+      } else if (matchedText == '<br>' || matchedText == '<br/>' || matchedText == '<br />') {
+        spans.add(const TextSpan(text: '\n'));
       } else if (matchedText == '<hr>') {
-        spans.add(WidgetSpan(
-          child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              height: 1,
-              color: AppColors.darkGreyText),
-        ));
+        spans.add(const TextSpan(text: '\n'));
       }
 
       currentIndex = end;
     }
 
-    // Add any trailing text
     if (currentIndex < content.length) {
       final trailing = content.substring(currentIndex).trim();
       if (trailing.isNotEmpty) {
         spans.add(TextSpan(
           text: trailing,
-          style: AppFontStyles.questionText,
+          style: AppFontStyles.bodyLarge.copyWith(color: AppColors.black),
         ));
       }
     }
@@ -195,119 +1161,179 @@ class _QuestionScreenState extends State<QuestionScreen> {
     );
   }
 
-  void submitAnswer() {
+  Widget _buildActionButton() {
+    if (!hasAnswered) {
+      final question = widget.questions[currentIndex];
+      final typeId = question['type_id'];
+      
+      bool canSubmit = false;
+      if (typeId == 1) {
+        canSubmit = selectedAnswer != null;
+      } else if (typeId == 2) {
+        canSubmit = fillInAnswers.values.any((answer) => answer.isNotEmpty);
+      }
+      
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: ElevatedButton(
+          onPressed: canSubmit ? _submitAnswer : null,
+          style: canSubmit 
+            ? AppButtonStyles.questionPrimary 
+            : AppButtonStyles.questionPrimary.copyWith(
+                backgroundColor: MaterialStateProperty.all(AppColors.darkGreyText),
+              ),
+          child: const Text('Check Answer'),
+        ),
+      );
+    }
+    
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ElevatedButton(
+        onPressed: _nextQuestion,
+        style: isCorrect ? AppButtonStyles.questionCorrect : AppButtonStyles.questionNext,
+        child: Text(_getNextButtonText()),
+      ),
+    );
+  }
+
+  bool _isCorrectAnswer(String answer) {
+    final question = widget.questions[currentIndex];
+    final correctIndex = question['correct_answer'] ?? 0;
+    final correctAnswer = question['answer$correctIndex'];
+    return answer == correctAnswer;
+  }
+
+  void _selectAnswer(String answer) {
+    setState(() {
+      selectedAnswer = answer;
+    });
+  }
+
+  void _handleKeypadInput(String value) {
+    if (activeInputField.isEmpty) return;
+    
+    setState(() {
+      if (value == '⌫') {
+        if (fillInAnswers[activeInputField]?.isNotEmpty == true) {
+          fillInAnswers[activeInputField] = fillInAnswers[activeInputField]!.substring(
+            0, fillInAnswers[activeInputField]!.length - 1
+          );
+        }
+      } else {
+        fillInAnswers[activeInputField] = (fillInAnswers[activeInputField] ?? '') + value;
+      }
+    });
+  }
+
+  void _submitAnswer() {
     final question = widget.questions[currentIndex];
     final typeId = question['type_id'];
     final questionId = question['id'];
-    final options = List.generate(4, (i) => question['answer$i'] ?? '');
-    final index = options.indexOf(selectedOption ?? '');
+    
     bool correct = false;
     dynamic userAnswer;
-    int difficulty = question['difficulty_id'] ?? 1;
-
+    
     if (typeId == 1) {
-      correct = AnswerService.checkMCQAnswer(question, selectedOption);
-      userAnswer = index >= 0
-          ? index.toString()
-          : '0'; // default to '0' or 'null' string
+      correct = _isCorrectAnswer(selectedAnswer ?? '');
+      final options = List.generate(4, (i) => question['answer$i']?.toString() ?? '');
+      final selectedIndex = options.indexOf(selectedAnswer ?? '');
+      userAnswer = selectedIndex >= 0 ? selectedIndex.toString() : '0';
     } else if (typeId == 2) {
-      final indexedInputs = <int, String?>{};
-
-      for (final entry in fibAnswers.entries) {
+      final indexedAnswers = <int, String?>{};
+      for (final entry in fillInAnswers.entries) {
         final keyParts = entry.key.split('_');
-        if (keyParts.length < 2) continue;
-
-        final index = int.tryParse(keyParts.last);
-        if (index != null) {
-          indexedInputs[index] = entry.value?.trim();
+        if (keyParts.length >= 2) {
+          final index = int.tryParse(keyParts.last);
+          if (index != null) {
+            indexedAnswers[index] = entry.value?.trim();
+          }
         }
       }
-
-      final result = AnswerService.checkFIBNumbers(
-        question,
-        indexedInputs,
-      );
-      correct = result['isCorrect'];
-      userAnswer = result['answers'];
-    }
-
-    if (correct) {
-      if (attempts == 0) {
-        kudos += (difficulty == 3)
-            ? 4
-            : (difficulty == 2)
-                ? 3
-                : 2;
-      } else {
-        kudos += 1;
+      
+      final answerList = <String?>[null, null, null, null];
+      for (int i = 0; i < 4; i++) {
+        answerList[i] = indexedAnswers[i];
       }
+      userAnswer = answerList;
+      
+      correct = fillInAnswers.values.any((answer) => answer.isNotEmpty);
     }
-    submittedQuestionIds.add(questionId);
-    submittedAnswers.add(userAnswer);
-
+    
     setState(() {
-      submitted = true;
+      hasAnswered = true;
       isCorrect = correct;
-      attempts++;
     });
+    
+    if (isCorrect) {
+      _feedbackAnimationController.forward();
+    } else {
+      _reduceLives();
+    }
+    
+    submittedQuestionIds.add(questionId);
+    if (typeId == 1) {
+      submittedAnswers.add([userAnswer, null, null, null]);
+    } else {
+      submittedAnswers.add(userAnswer);
+    }
+  }
 
-    if (correct || attempts >= 2) {
-      if (!correct && attempts >= 2) {
-        _reduceLife();
-      }
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (!mounted) return;
-
-        if (currentIndex == widget.questions.length - 1) {
-          sendAnswersAndNavigate();
-        } else {
-          setState(() {
-            currentIndex++;
-            submitted = false;
-            isCorrect = false;
-            selectedOption = null;
-            fibAnswers.clear();
-            activeInputId = '';
-            attempts = 0;
-
-            // 👇 Ensure FIB input is activated on new question
-            final nextQuestion = widget.questions[currentIndex];
-            if (nextQuestion['type_id'] == 2) {
-              activeInputId = 'input_0';
-            }
-          });
-        }
+  void _reduceLives() async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentLives = prefs.getInt('lives') ?? 5;
+    if (currentLives > 0) {
+      await prefs.setInt('lives', currentLives - 1);
+      setState(() {
+        lives = currentLives - 1;
       });
     }
   }
 
-  void resetForRetry() {
-    setState(() {
-      submitted = false;
-      isCorrect = false;
-      selectedOption = null;
-      fibAnswers.clear(); // Clear AFTER answer was already recorded
-      activeInputId = ''; // Also clear this mapping to prevent stale keys
-    });
+  void _nextQuestion() {
+    if (currentIndex < widget.questions.length - 1) {
+      setState(() {
+        currentIndex++;
+        hasAnswered = false;
+        isCorrect = false;
+        selectedAnswer = null;
+        fillInAnswers.clear();
+        activeInputField = '';
+      });
+      
+      _feedbackAnimationController.reset();
+      _initializeQuestion();
+      _progressAnimationController.reset();
+      _progressAnimationController.forward();
+    } else {
+      _finishQuestions();
+    }
   }
 
-  Future<void> sendAnswersAndNavigate() async {
+  String _getNextButtonText() {
+    return isCorrect ? 'Correct! Continue' : 'Continue';
+  }
+
+  void _finishQuestions() {
+    _sendResults();
+  }
+
+  Future<void> _sendResults() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
     final name = prefs.getString('first_name') ?? 'Student';
     final isSubscriberBool = prefs.getBool('is_subscriber') ?? false;
 
-    // Build the answers map in the required format
     Map<String, List<String?>> answerMap = {};
     for (int i = 0; i < submittedQuestionIds.length; i++) {
       final qid = submittedQuestionIds[i].toString();
       final ans = submittedAnswers[i];
 
-      // Ensure every answer is a list of 4 elements (even for MCQ)
       if (ans is List) {
         answerMap[qid] = List<String?>.from(ans);
       } else {
-        // Assume MCQ: store answer as a list with answer[0] = ans
         answerMap[qid] = [ans.toString(), null, null, null];
       }
     }
@@ -356,24 +1382,23 @@ class _QuestionScreenState extends State<QuestionScreen> {
         ),
       );
     } else if (result['code'] == 204) {
-      // Show a simple alert and pop back to main menu
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Track Completed'),
-          content:
-              const Text('You have completed all questions for this track.'),
+          title: Text('Track Completed', style: AppFontStyles.headingMedium),
+          content: Text('You have completed all questions for this track.', 
+                       style: AppFontStyles.bodyMedium),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // close dialog
+                Navigator.pop(context);
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (_) => BottomNavScreen()),
                   (route) => false,
                 );
               },
-              child: const Text('OK'),
+              child: Text('OK', style: AppFontStyles.buttonSecondary),
             ),
           ],
         ),
@@ -381,260 +1406,74 @@ class _QuestionScreenState extends State<QuestionScreen> {
     }
   }
 
-  Widget buildMCQOption(String? optionText, int index) {
-    bool isSelected = selectedOption == optionText;
-    bool isRight = submitted && isCorrect && isSelected;
-    bool isWrong = submitted && !isCorrect && isSelected;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTap: (submitted && !isCorrect && attempts >= 1)
-          ? null
-          : () => setState(() => selectedOption = optionText),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isRight
-              ? Colors.green[50]
-              : isWrong
-                  ? Colors.red[50]
-                  : AppColors.tileGrey,
-          borderRadius: BorderRadius.circular(8.65),
-          border: Border.all(
-            color: isRight
-                ? Colors.green
-                : isWrong
-                    ? Colors.red
-                    : isSelected
-                        ? AppColors.darkRed
-                        : AppColors.lightGreyBackground,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: renderHtmlWithLatex(preprocessLatex(optionText ?? '')),
-            ),
-            if (isRight) const Icon(Icons.check_circle, color: Colors.green),
-            if (isWrong) const Icon(Icons.cancel, color: Colors.red),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget buildNumInputPad() {
-    return NumInputPad(
-      userInput: fibAnswers[activeInputId] ?? '',
-      onChanged: (updatedValue) {
-        setState(() {
-          fibAnswers[activeInputId] = updatedValue;
-        });
-      },
-    );
-  }
-
-  Widget buildSubmitButton(bool isLast) {
-    return ElevatedButton(
-      onPressed: () {
-        if (!submitted) {
-          submitAnswer();
-        } else if (isCorrect) {
-          if (isLast) {
-            sendAnswersAndNavigate();
-          } else {
-            setState(() {
-              currentIndex++;
-              submitted = false;
-              isCorrect = false;
-              selectedOption = null;
-              fibAnswers.clear();
-              activeInputId = '';
-              attempts = 0;
-            });
-          }
-        }
-      },
-      style: isCorrect
-          ? AppButtonStyles.questionCorrect
-          : AppButtonStyles.questionPrimary,
-      child: Text(
-        !submitted
-            ? 'Submit'
-            : isCorrect
-                ? 'Correct!'
-                : '',
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  Widget buildRetrySkipButtons(bool isLast) {
-    return Column(
-      children: [
-        ElevatedButton(
-          style: AppButtonStyles.questionTryAgain,
-          onPressed: resetForRetry,
-          child: const Text('Try Again!'),
-        ),
-        const SizedBox(height: 8),
-        ElevatedButton(
-          style: AppButtonStyles.questionSkip,
-          onPressed: () async {
-            await _reduceLife();
-            if (isLast) {
-              sendAnswersAndNavigate();
-            } else {
-              setState(() {
-                currentIndex++;
-                submitted = false;
-                isCorrect = false;
-                selectedOption = null;
-                fibAnswers.clear();
-                activeInputId = '';
-                attempts = 0;
-              });
-            }
-          },
-          child: const Text('Skip Question'),
-        ),
-      ],
-    );
+  @override
+  void dispose() {
+    _feedbackAnimationController.dispose();
+    _progressAnimationController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (noLivesLeft) {
+    if (lives <= 0) {
       return Scaffold(
         backgroundColor: AppColors.white,
         body: Center(
-          child: Text(
-            'No lives left. Please try again later.',
-            style: AppFontStyles.questionText,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.favorite_border, size: 64, color: AppColors.error),
+              const SizedBox(height: 16),
+              Text(
+                'Out of Lives!',
+                style: AppFontStyles.headingLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Take a break and come back later.',
+                style: AppFontStyles.bodyMedium.copyWith(color: AppColors.darkGreyText),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => BottomNavScreen()),
+                ),
+                style: AppButtonStyles.primary,
+                child: const Text('Back to Home'),
+              ),
+            ],
           ),
         ),
       );
     }
-    final q = widget.questions[currentIndex];
-    final typeId = q['type_id'];
-    final isLast = currentIndex == widget.questions.length - 1;
 
-    Widget buildMCQGrid(Map<String, dynamic> question, bool isWide) {
-      final options = question.entries
-          .where(
-              (entry) => entry.key.startsWith('answer') && entry.value != null)
-          .toList();
-
-      return SizedBox(
-        height: answerAreaHeight,
-        child: GridView.count(
-          crossAxisCount: 2,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: isWide ? 2 : 1.5, // adjust as needed
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
-          padding: EdgeInsets.zero,
-          children: options.map<Widget>((entry) {
-            final index = int.tryParse(entry.key.replaceAll('answer', '')) ?? 0;
-            return buildMCQOption(entry.value, index);
-          }).toList(),
-        ),
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth > 600;
-        final screenWidth = constraints.maxWidth;
-        final screenHeight = constraints.maxHeight;
-        final horizontalPadding = screenWidth < 400
-            ? 8.0
-            : (screenWidth > 800 ? screenWidth * 0.15 : 16.0);
-
-        return Scaffold(
-          backgroundColor: AppColors.white,
-          body: Padding(
-            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-            child: Column(
-              children: [
-                const SizedBox(height: 24),
-
-                // 1. Header
-                QuestionHeader(
-                  currentIndex: currentIndex,
-                  totalQuestions: widget.questions.length,
-                  onClose: () => Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => BottomNavScreen()),
-                  ),
-                  videos: q['videos'],
-                  skill: q['skill'],
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildQuestion(),
+                    const SizedBox(height: 24),
+                    _buildAnswerArea(),
+                    const SizedBox(height: 32),
+                  ],
                 ),
-
-                const SizedBox(height: 0),
-
-                // 2. Main scrollable content: Question, Image, and Answer Input
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Center(
-                          child: renderHtmlWithLatex(
-                              preprocessLatex(q['question'] ?? '')),
-                        ),
-                        const SizedBox(height: 12),
-
-                        if (q['question_image'] != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final imageWidth = constraints.maxWidth;
-                                return PlatformNetworkImage(
-                                  imageUrl:
-                                      "${AppConfig.apiBaseUrl}${q['question_image']}",
-                                  width: imageWidth,
-                                  fit: BoxFit.contain,
-                                );
-                              },
-                            ),
-                          ),
-
-                        const SizedBox(height: 16),
-
-                        // Answer area
-                        typeId == 1
-                            ? buildMCQGrid(q, isWide)
-                            : Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: buildNumInputPad(),
-                              ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 4. Submit / Retry
-                if (!submitted || isCorrect) buildSubmitButton(isLast),
-                if (submitted && !isCorrect && attempts < 2)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: buildRetrySkipButtons(isLast),
-                  ),
-
-                const SizedBox(height: 16),
-              ],
+              ),
             ),
-          ),
-        );
-      },
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: _buildActionButton(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

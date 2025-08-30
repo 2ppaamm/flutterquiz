@@ -24,11 +24,49 @@ class AppFontStyles {
     fontWeight: FontWeight.w500, // medium weight (not bold)
     color: AppColors.black,
   );
+  
   static final heading4 = GoogleFonts.montserrat(
     fontSize: 18,
     fontWeight: FontWeight.w700, // medium weight (not bold)
     color: AppColors.darkRed,
     fontStyle: FontStyle.normal,
+  );
+
+  // Missing font styles needed by QuestionScreen
+  static final headingLarge = GoogleFonts.montserrat(
+    fontSize: 32,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+    letterSpacing: -1,
+    color: AppColors.black,
+  );
+
+  static final headingMedium = GoogleFonts.montserrat(
+    fontSize: 22,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+    color: AppColors.black,
+  );
+
+  static final bodyLarge = GoogleFonts.montserrat(
+    fontSize: 18,
+    fontWeight: FontWeight.w400,
+    height: 1.5,
+    color: AppColors.black,
+  );
+
+  static final bodyMedium = GoogleFonts.montserrat(
+    fontSize: 16,
+    fontWeight: FontWeight.w400,
+    height: 1.4,
+    color: AppColors.black,
+  );
+
+  static final caption = GoogleFonts.montserrat(
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    height: 1.3,
+    color: AppColors.darkGreyText,
   );
 
   static final headingSubtitle = GoogleFonts.montserrat(
@@ -95,6 +133,7 @@ class AppFontStyles {
     height: 1.3,
     color: AppColors.white,
   );
+  
   static final buttonSecondary = GoogleFonts.montserrat(
     fontSize: 20,
     fontWeight: FontWeight.w700,
@@ -107,7 +146,8 @@ class AppFontStyles {
     height: 1.3,
     color: AppColors.black,
   );
-    static final buttonQuestion = GoogleFonts.montserrat(
+  
+  static final buttonQuestion = GoogleFonts.montserrat(
     fontSize: 20,
     fontWeight: FontWeight.w600,
     color: AppColors.white,

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 /// For web-specific imports
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
-import 'dart:ui' as ui;
+import 'dart:ui_web' as ui;
 
 class PlatformNetworkImage extends StatelessWidget {
   final String imageUrl;
