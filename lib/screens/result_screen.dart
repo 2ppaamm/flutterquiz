@@ -5,7 +5,7 @@ import '../theme/app_font_styles.dart';
 import '../theme/app_colors.dart';
 import 'bottom_nav_screen.dart';
 
-class ResultsScreen extends StatefulWidget {
+class ResultScreen extends StatefulWidget {
   final int kudos;
   final double maxile;
   final double percentage;
@@ -15,7 +15,7 @@ class ResultsScreen extends StatefulWidget {
   final int durationInSeconds;
   final String encouragement;
 
-  const ResultsScreen({
+  const ResultScreen({
     super.key,
     required this.kudos,
     required this.maxile,
@@ -28,10 +28,10 @@ class ResultsScreen extends StatefulWidget {
   });
 
   @override
-  State<ResultsScreen> createState() => _ResultsScreenState();
+  State<ResultScreen> createState() => _ResultScreenState();
 }
 
-class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateMixin {
+class _ResultScreenState extends State<ResultScreen> with TickerProviderStateMixin {
   late AnimationController _progressAnimationController;
   late AnimationController _statsAnimationController;
   late Animation<double> _progressAnimation;

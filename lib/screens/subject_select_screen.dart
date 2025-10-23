@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+
+// Add these imports at the top
 import '../services/track_service.dart';
 import '../services/question_service.dart';
-import 'question_screen.dart';
-import '../widgets/common_header.dart';
+import '../config.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_font_styles.dart';
-
-//import '../widgets/user_status_header.dart';
+import '../widgets/common_header.dart';
+import 'question_screen.dart';
+import '../widgets/out_of_lives_modal.dart';
+import 'bottom_nav_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SubjectSelectScreen extends StatefulWidget {
   @override
@@ -43,9 +47,9 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
 
         if (levelId == null || levelId > 7) continue;
 
-        if (fieldName.startsWith('Primary School ')) {
-          final strippedField = fieldName.replaceFirst('Primary School ', '');
-          fields.putIfAbsent(strippedField, () => []).add(track);
+        // ✅ FIXED: Just use the field name as-is, no prefix required
+        if (fieldName.isNotEmpty) {
+          fields.putIfAbsent(fieldName, () => []).add(track);
         }
 
         levels.putIfAbsent(levelId, () => []).add(track);
@@ -63,19 +67,76 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
     }
   }
 
+  int _calculateNextLifeTime(Map<String, dynamic> response) {
+    // Get next_life_in_seconds from API response, or default to 1800 (30 minutes)
+    if (response.containsKey('next_life_in_seconds') && 
+        response['next_life_in_seconds'] != null) {
+      return response['next_life_in_seconds'] as int;
+    }
+    return 1800; // Default: 30 minutes
+  }
+
   Widget buildTile(dynamic track) {
     final title = track['track'] ?? 'Untitled';
     final trackId = track['id'];
     final trackName = track['name'] ?? title;
+    final imageUrl = track['image'] != null
+        ? '${AppConfig.apiBaseUrl}/media/${track['image']}'
+        : null;
 
     return GestureDetector(
       onTap: () async {
-        final response = await QuestionService.getQuestionsForTrack(trackId);
-        if (response != null &&
-            response['questions'] is List &&
+        // FIXED: Convert trackId to String
+        final response = await QuestionService.getQuestionsForTrack(trackId.toString());
+        
+        if (response == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load questions. Please try again.')),
+          );
+          return;
+        }
+
+        // Check for out of lives response (code 205)
+        if (response['code'] == 205 || 
+            (response['lives'] != null && response['lives'] == 0 && 
+             response['can_answer'] == false)) {
+          OutOfLivesModal.show(
+            context,
+            nextLifeInSeconds: _calculateNextLifeTime(response),
+            onGoBack: () {
+              // Stay on subject select screen
+            },
+            customMessage: response['message'],
+          );
+          return;
+        }
+
+        // Check if we have questions
+        if (response['questions'] is List &&
             (response['questions'] as List).isNotEmpty) {
           final List<dynamic> questions = response['questions'];
-          final int testId = int.tryParse(response['test'].toString()) ?? 0;
+          final int testId = int.tryParse(response['test_id']?.toString() ?? response['test']?.toString() ?? '0') ?? 0;
+
+          // ✅ SYNC: Update lives AND unlimited flag from API response to local storage
+          final prefs = await SharedPreferences.getInstance();
+          
+          if (response['lives'] != null) {
+            await prefs.setInt('lives', response['lives'] as int);
+          }
+          
+          if (response['max_lives'] != null) {
+            await prefs.setInt('max_lives', response['max_lives'] as int);
+          }
+          
+          // ✅ CRITICAL: Save unlimited flag
+          if (response['unlimited'] != null) {
+            await prefs.setBool('unlimited', response['unlimited'] as bool);
+          }
+          
+          // ✅ Also save can_answer if available
+          if (response['can_answer'] != null) {
+            await prefs.setBool('can_answer', response['can_answer'] as bool);
+          }
 
           Navigator.push(
             context,
@@ -85,6 +146,7 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
                 trackName: trackName,
                 testId: testId,
                 questions: questions,
+                sessionType: 'track',
               ),
             ),
           );
@@ -103,13 +165,52 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
                 color: AppColors.tileGrey,
                 borderRadius: BorderRadius.circular(8),
               ),
+              child: imageUrl != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        headers: {
+                          'Accept': 'image/webp,image/*',
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          print('IMAGE ERROR: $error');
+                          print('STACKTRACE: $stackTrace');
+                          return Container(
+                            color: AppColors.tileGrey,
+                            child: Icon(
+                              Icons.image_not_supported,
+                              color: AppColors.darkGreyText,
+                              size: 32,
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                  : Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.tileGrey,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.book,
+                        color: AppColors.darkGreyText,
+                        size: 32,
+                      ),
+                    ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            title,
-            textAlign: TextAlign.left,
-            style: AppFontStyles.tileText,
           ),
         ],
       ),
@@ -133,7 +234,7 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
                 crossAxisCount: 3,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 0.75, // slightly taller to fit text
+                childAspectRatio: 0.75,
               ),
               itemBuilder: (context, index) => buildTile(entry.value[index]),
             ),
@@ -185,11 +286,9 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
             : Column(
                 children: [
                   const SizedBox(height: 12),
-  //                const UserStatusHeader(), // 🔺 NEW HEADER WIDGET HERE
                   const SizedBox(height: 16),
                   Text('Subject Selection', style: AppFontStyles.heading1),
-
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   Text('All Gifted Math', style: AppFontStyles.heading2),
                   const SizedBox(height: 24),
                   TabBar(

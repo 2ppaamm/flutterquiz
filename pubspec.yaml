@@ -15,7 +15,7 @@ dependencies:
   shared_preferences: ^2.2.2
   rive: ^0.13.20
   video_player: ^2.7.2
-  lottie: ^2.7.0
+  lottie: ^3.1.0
 
   flutter_html: ^3.0.0
   flutter_html_math: ^3.0.0
@@ -23,6 +23,8 @@ dependencies:
   flutter_spinbox: ^0.13.1
   flutter_stripe: ^11.5.0
   google_fonts: ^6.1.0
+  url_launcher: ^6.2.5
+  chewie: ^1.7.0
 
 dev_dependencies:
   flutter_test:
@@ -36,9 +38,16 @@ flutter:
     - assets/character2.png
     - assets/logo.png
     - assets/kudo.png
-    - assets/rubick_hover.riv
-    - assets/animations/placeholder.json
-    - assets/animations/octo.gif
-    - assets/animations/fireworks.json
-    - assets/animations/heart.json
-    - assets/animations/octo2.gif    
+    - assets/animations/octo_diagnostic.json
+    - assets/animations/octo2.gif
+    - assets/animations/success.json
+    - assets/animations/BalloonConfetti.json
+    - assets/animations/Fireworks.json
+    - assets/animations/Partytoy.json
+    - assets/animations/Trophy.json
+    - assets/animations/Confetti.json
+    - assets/animations/Confetti1.json
+    - assets/animations/Correct.json
+    - assets/animations/OctopusBalloons.json
+    - assets/animations/TaskComplete.json
+    - assets/heart.svg

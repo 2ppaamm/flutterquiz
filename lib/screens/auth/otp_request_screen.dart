@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
-import '../bottom_nav_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+import '../bottom_nav_screen.dart';
 import '../pre_user_info_screen.dart';
+
 import '../../theme/app_button_styles.dart';
 import '../../theme/app_input_styles.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_font_styles.dart';
 import '../../config.dart';
+import '../../services/auth_service.dart';
+
 import 'dart:ui_web' as ui;
 import 'dart:html' as html;
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 
 class OTPRequestScreen extends StatefulWidget {
   final String? prefilledEmail;
   final bool showOTPField;
-  
+
   const OTPRequestScreen({
-    Key? key, 
+    Key? key,
     this.prefilledEmail,
     this.showOTPField = false,
   }) : super(key: key);
@@ -29,23 +33,25 @@ class OTPRequestScreen extends StatefulWidget {
 class _OTPRequestScreenState extends State<OTPRequestScreen> {
   final _contactController = TextEditingController();
   final _otpController = TextEditingController();
+
   bool _sent = false;
   bool _loading = false;
   String? _contactError;
   int? _userId;
-  bool _isEmailVerification = false; // Track if this is email verification
+  bool _isEmailVerification = false;
 
   @override
   void initState() {
     super.initState();
-    
-    // Handle prefilled email and show OTP field immediately
+
     if (widget.prefilledEmail != null) {
       _contactController.text = widget.prefilledEmail!;
       _sent = widget.showOTPField;
-      _isEmailVerification = widget.showOTPField; // Coming from registration
+      _isEmailVerification = widget.showOTPField;
     }
 
+    // Logo/web image
+    // ignore: undefined_prefixed_name
     ui.platformViewRegistry.registerViewFactory(
       'externalImage',
       (int viewId) => html.ImageElement()
@@ -72,108 +78,104 @@ class _OTPRequestScreenState extends State<OTPRequestScreen> {
   Future<void> _sendOTP() async {
     final contact = _contactController.text.trim();
     if (!_isValidContact(contact)) {
-      setState(() => _contactError = 'Enter a valid email or phone number with country code');
+      setState(() => _contactError =
+          'Enter a valid email or phone number with country code');
       return;
     }
-    
+
     setState(() {
       _loading = true;
       _contactError = null;
     });
 
     try {
-      final response = await http.post(
+      final resp = await http.post(
         Uri.parse('${AppConfig.apiBaseUrl}/api/auth/request-otp'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'contact': contact,
-        }),
+        body: jsonEncode({'contact': contact}),
       );
 
       setState(() => _loading = false);
-      final responseBody = jsonDecode(response.body);
+      final Map<String, dynamic> body = resp.body.isNotEmpty
+          ? (jsonDecode(resp.body) as Map<String, dynamic>)
+          : <String, dynamic>{};
 
-      if (response.statusCode == 200) {
-        // Store user_id for registration
-        if (responseBody['user_id'] != null) {
-          _userId = responseBody['user_id'];
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setInt('user_id', _userId!);
+      if (resp.statusCode == 200) {
+        // Save user_id if backend returned it
+        if (body['user_id'] != null) {
+          final raw = body['user_id'];
+          final id = (raw is int) ? raw : int.tryParse(raw.toString());
+          if (id != null) {
+            _userId = id;
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setInt('user_id', id);
+          }
         }
 
-        // Check if this is an existing user with OTP sent
-        if (responseBody['email_hint'] != null) {
+        // Existing user flow → show OTP input
+        if (body['email_hint'] != null || body['phone_hint'] != null) {
           setState(() {
             _sent = true;
-            _isEmailVerification = false; // This is login OTP
+            _isEmailVerification = false;
           });
+          final hint = body['email_hint'] ?? body['phone_hint'];
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('OTP sent to ${responseBody['email_hint']}'),
+              content: Text('OTP sent to $hint'),
               backgroundColor: AppColors.success,
             ),
           );
         } else {
-          // New user - redirect to registration
+          // New user flow → go to pre-user screen
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (_) => PreUserInfoScreen(
                 contact: contact,
                 userId: _userId,
-                isNewUser: true,
               ),
             ),
           );
         }
-      } else if (response.statusCode == 422) {
-        // Handle different 422 responses
-        if (responseBody['requires_profile_completion'] == true) {
-          _userId = responseBody['user_id'];
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setInt('user_id', _userId!);
-          
+      } else if (resp.statusCode == 422) {
+        // Legacy profile completion handling
+        if (body['requires_profile_completion'] == true) {
+          final raw = body['user_id'];
+          final id = (raw is int) ? raw : int.tryParse(raw?.toString() ?? '');
+          if (id != null) {
+            _userId = id;
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setInt('user_id', id);
+          }
+
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (_) => PreUserInfoScreen(
                 contact: contact,
                 userId: _userId,
-                isNewUser: false,
               ),
             ),
           );
           return;
-        } else if (responseBody['requires_email_verification'] == true) {
-          // Show OTP field for email verification
-          setState(() {
-            _sent = true;
-            _isEmailVerification = true; // This is email verification
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Please verify your email to continue. Check your inbox for the verification code.'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 4),
-            ),
-          );
-          return;
-        } else {
-          setState(() => _contactError = responseBody['message'] ?? 'Invalid contact information');
         }
+
+        setState(() =>
+            _contactError = body['message'] ?? 'Invalid contact information');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(responseBody['message'] ?? 'Failed to send OTP. Please try again.'),
+            content: Text(
+                body['message'] ?? 'Failed to send OTP. Please try again.'),
             backgroundColor: AppColors.error,
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Network error. Please check your connection.'),
+          content: const Text('Network error. Please check your connection.'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -181,119 +183,112 @@ class _OTPRequestScreenState extends State<OTPRequestScreen> {
   }
 
   Future<void> _verifyOTP() async {
-    if (_otpController.text.isEmpty) return;
-    setState(() => _loading = true);
-    
-    try {
-      String endpoint;
-      Map<String, String> body;
-      
-      // Determine which endpoint to use based on verification type
-      if (_isEmailVerification) {
-        // Email verification
-        endpoint = '${AppConfig.apiBaseUrl}/api/auth/verify-email';
-        body = {
-          'email': _contactController.text.trim(),
-          'verification_code': _otpController.text.trim(),
-        };
-      } else {
-        // Login OTP verification  
-        endpoint = '${AppConfig.apiBaseUrl}/api/auth/verify-otp';
-        body = {
-          'contact': _contactController.text.trim(),
-          'otp_code': _otpController.text.trim(),
-        };
-      }
-      
-      final response = await http.post(
-        Uri.parse(endpoint),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
+    final otp = _otpController.text.trim();
+    if (otp.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please enter a valid 6-digit code'),
+          backgroundColor: AppColors.error,
+        ),
       );
-      
-      setState(() => _loading = false);
-      final responseBody = jsonDecode(response.body);
-      
-      if (response.statusCode == 200) {
-        final prefs = await SharedPreferences.getInstance();
-        
-        if (_isEmailVerification) {
-          // Email verification successful - get stored user data
-          final firstName = prefs.getString('first_name') ?? '';
-          final isPartnerUser = prefs.getBool('is_partner_user') ?? false;
-          final partnerName = prefs.getString('partner_name');
-          
-          // Set login state
-          await prefs.setBool('is_logged_in', true);
-          
-          // Show success message
-          if (isPartnerUser && partnerName != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Email verified! Welcome $partnerName user with premium access.'),
-                backgroundColor: AppColors.success,
-                duration: Duration(seconds: 4),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Email verified successfully! Welcome to All Gifted Math.'),
-                backgroundColor: AppColors.success,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        } else {
-          // Login verification successful - store user data from response
-          final token = responseBody['token'] as String;
-          final firstName = responseBody['first_name']?.toString() ?? '';
-          final isPartnerUser = responseBody['is_partner_user'] as bool? ?? false;
-          final partnerName = responseBody['partner_name']?.toString();
-          final accessType = responseBody['access_type']?.toString() ?? 'free';
-          
-          await prefs.setString('auth_token', token);
-          await prefs.setString('first_name', firstName);
-          await prefs.setBool('is_partner_user', isPartnerUser);
-          await prefs.setString('access_type', accessType);
-          if (partnerName != null) {
-            await prefs.setString('partner_name', partnerName);
-          }
-          await prefs.setBool('is_logged_in', true);
-          await prefs.setString('contact', _contactController.text);
+      return;
+    }
 
-          // Show partner welcome message if applicable
-          if (isPartnerUser && partnerName != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Welcome $partnerName user! You have premium access.'),
-                backgroundColor: AppColors.success,
-                duration: Duration(seconds: 4),
-              ),
-            );
+    setState(() => _loading = true);
+
+    try {
+      final contact = _contactController.text.trim();
+
+      print('🔐 Verifying OTP for: $contact');
+
+      final resp = await http.post(
+        Uri.parse('${AppConfig.apiBaseUrl}/api/auth/verify-otp'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'contact': contact,
+          'otp_code': otp,
+        }),
+      );
+
+      print('📥 OTP Response: ${resp.statusCode}');
+      print('📥 Response body: ${resp.body}');
+
+      setState(() => _loading = false);
+      final Map<String, dynamic> body = resp.body.isNotEmpty
+          ? (jsonDecode(resp.body) as Map<String, dynamic>)
+          : <String, dynamic>{};
+
+      if (resp.statusCode == 200) {
+        // Save token using AuthService
+        if (body['token'] != null) {
+          print('✅ Token received: ${body['token'].substring(0, 20)}...');
+          await AuthService.saveToken(body['token']);
+          print('✅ Token saved to SharedPreferences');
+
+          // Verify it was saved
+          final savedToken = await AuthService.getToken();
+          print(
+              '✅ Verified token in storage: ${savedToken?.substring(0, 20)}...');
+        } else {
+          print('⚠️ No token in response!');
+        }
+
+        // Save user info
+        if (body['user_id'] != null) {
+          final raw = body['user_id'];
+          final id = (raw is int) ? raw : int.tryParse(raw.toString());
+          if (id != null) {
+            await AuthService.saveUserId(id);
+            print('✅ User ID saved: $id');
           }
         }
-        
-        // Navigate to main app
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const BottomNavScreen(),
-          ),
-        );
+
+        // Check if Kiasu is needed based on backend recommendation
+        final kiasuRecommended = body['kiasu_recommended'] ?? false;
+        print('🎯 Kiasu recommended: $kiasuRecommended');
+
+        if (kiasuRecommended) {
+          // Backend says we need Kiasu screen
+          print('→ Navigating to PreUserInfoScreen');
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PreUserInfoScreen(
+                contact: contact,
+                userId: _userId,
+              ),
+            ),
+          );
+        } else {
+          // Backend says skip Kiasu - mark as completed
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('kiasu_completed', true);
+          print('→ Navigating to BottomNavScreen');
+
+          // Go to main app
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => BottomNavScreen()),
+          );
+        }
       } else {
+        print('❌ OTP verification failed: ${resp.statusCode}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(responseBody['message'] ?? 'Invalid or expired OTP'),
+            content: Text(body['message'] ?? 'Invalid OTP. Please try again.'),
             backgroundColor: AppColors.error,
           ),
         );
       }
     } catch (e) {
+      print('❌ Error verifying OTP: $e');
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Network error. Please try again.'),
+          content: const Text('Network error. Please check your connection.'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -309,11 +304,9 @@ class _OTPRequestScreenState extends State<OTPRequestScreen> {
 
   String _getSubtitle() {
     if (_sent) {
-      if (_isEmailVerification) {
-        return 'Enter the 6-digit code sent to your email to complete your account setup';
-      } else {
-        return 'We sent a 6-digit login code to your email';
-      }
+      return _isEmailVerification
+          ? 'Enter the 6-digit code sent to your email to complete your account setup'
+          : 'We sent a 6-digit login code to your email';
     }
     return '';
   }
@@ -336,10 +329,7 @@ class _OTPRequestScreenState extends State<OTPRequestScreen> {
                 ),
               ),
               const SizedBox(height: 40),
-              Text(
-                _getScreenTitle(), 
-                style: AppFontStyles.heading2
-              ),
+              Text(_getScreenTitle(), style: AppFontStyles.heading2),
               const SizedBox(height: 8),
               if (_sent)
                 Text(
@@ -352,8 +342,9 @@ class _OTPRequestScreenState extends State<OTPRequestScreen> {
               TextField(
                 controller: _contactController,
                 keyboardType: TextInputType.emailAddress,
-                enabled: !_sent, // Disable editing when OTP is sent
-                decoration: AppInputStyles.general('Email address or Phone').copyWith(
+                enabled: !_sent,
+                decoration:
+                    AppInputStyles.general('Email address or Phone').copyWith(
                   errorText: _contactError,
                 ),
               ),
@@ -401,18 +392,6 @@ class _OTPRequestScreenState extends State<OTPRequestScreen> {
                     ),
                   ),
                 ),
-                if (_isEmailVerification) ...[
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      'Didn\'t receive the email? Check your spam folder.',
-                      style: AppFontStyles.caption.copyWith(
-                        color: AppColors.darkGreyText,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
               ],
             ],
           ),

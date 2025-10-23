@@ -1,75 +1,192 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../config.dart';
+import '../../config.dart';
 
 class QuestionService {
-  static const String baseUrl = '${AppConfig.apiBaseUrl}/api';
-
-  static Future<Map<String, dynamic>?> getQuestionsForTrack(int trackId) async {
+  /// Get questions for a specific track (Browse Topics)
+  static Future<Map<String, dynamic>?> getQuestionsForTrack(String trackId) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
-
+    
     if (token == null) {
-      print('🚫 No token found.');
+      print('❌ No token found');
       return null;
     }
 
-    final url = Uri.parse('$baseUrl/test/trackquestions/$trackId');
-    final response = await http.get(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-    );
+    try {
+      // FIXED: Correct endpoint /tracks/{track}/questions
+      final url = Uri.parse('${AppConfig.apiBaseUrl}/api/tracks/$trackId/questions');
+      print('📡 GET $url');
+      
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    print('📡 GET /test/trackquestions/$trackId → ${response.statusCode}');
+      print('📥 Response: ${response.statusCode}');
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final Map<String, dynamic> data = jsonDecode(response.body);
-      return data;
-    } else {
-      print('❌ Error fetching questions: ${response.body}');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ Questions loaded: ${data['questions']?.length ?? 0}');
+        return data;
+      } else if (response.statusCode == 403) {
+        print('🔒 403 - Premium required');
+        return {'error': 'premium_required'};
+      } else if (response.statusCode == 205) {
+        // Out of lives
+        final data = json.decode(response.body);
+        return data;
+      } else {
+        print('❌ Error: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ Exception in getQuestionsForTrack: $e');
       return null;
     }
   }
 
-  static Future<Map<String, dynamic>?> submitAnswers({
-    required int testId,
-    required Map<String, dynamic> answers,
-  }) async {
+  /// Start Kiasu Path (adaptive AI-guided practice)
+  static Future<Map<String, dynamic>?> startKiasuPath() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
-
+    
     if (token == null) {
-      print('🚫 No token found');
+      print('❌ No token found');
       return null;
     }
 
-    final url = Uri.parse('$baseUrl/test/answers');
-    final body = jsonEncode({
-      "test": testId,
-      "answers": answers,
-    });
+    try {
+      final url = Uri.parse('${AppConfig.apiBaseUrl}/api/kiasu-path/start');
+      print('📡 GET $url');
+      
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    final response = await http.post(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: body,
-    );
+      print('📥 Response: ${response.statusCode}');
 
-    print('📡 POST /test/answers → ${response.statusCode}');
-    print('📝 Response: ${response.body}');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ Kiasu Path started: ${data['questions']?.length ?? 0} questions');
+        
+        // Save that user has started Kiasu Path
+        await prefs.setBool('has_started_kiasu_path', true);
+        
+        return data;
+      } else if (response.statusCode == 403) {
+        print('🔒 403 - Premium required');
+        return {'error': 'premium_required', 'code': 403};
+      } else if (response.statusCode == 205) {
+        // Out of lives
+        final data = json.decode(response.body);
+        return data;
+      } else {
+        print('❌ Error: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ Exception in startKiasuPath: $e');
+      return null;
+    }
+  }
 
-    if (response.statusCode == 201 || response.statusCode == 206) {
-      return jsonDecode(response.body);
-    } else {
-      print('❌ Error submitting answers');
+  /// Continue Kiasu Path (get next set of questions)
+  static Future<Map<String, dynamic>?> continueKiasuPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    
+    if (token == null) {
+      print('❌ No token found');
+      return null;
+    }
+
+    try {
+      final url = Uri.parse('${AppConfig.apiBaseUrl}/api/kiasu-path/continue');
+      print('📡 GET $url');
+      
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      print('📥 Response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ Kiasu Path continued: ${data['questions']?.length ?? 0} questions');
+        return data;
+      } else if (response.statusCode == 403) {
+        print('🔒 403 - Premium required');
+        return {'error': 'premium_required', 'code': 403};
+      } else {
+        print('❌ Error: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ Exception in continueKiasuPath: $e');
+      return null;
+    }
+  }
+
+  /// Submit answers for questions
+  static Future<Map<String, dynamic>?> submitAnswers(
+    List<Map<String, dynamic>> answers,
+    String sessionType, // 'kiasu_path' or 'track'
+    String? trackId,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    
+    if (token == null) {
+      print('❌ No token found');
+      return null;
+    }
+
+    try {
+      final url = Uri.parse('${AppConfig.apiBaseUrl}/api/questions/submit');
+      print('📡 POST $url');
+      
+      final body = {
+        'answers': answers,
+        'session_type': sessionType,
+        if (trackId != null) 'track_id': trackId,
+      };
+      
+      print('📤 Submitting ${answers.length} answers');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(body),
+      );
+
+      print('📥 Response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ Answers submitted successfully');
+        return data;
+      } else {
+        print('❌ Error: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ Exception in submitAnswers: $e');
       return null;
     }
   }

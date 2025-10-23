@@ -1,35 +1,67 @@
-import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../config.dart';
+import 'auth_service.dart';
 
+/// Service for fetching tracks and track-related data
 class TrackService {
-  static const String baseUrl = '${AppConfig.apiBaseUrl}/api';
-
+  /// Fetch all available tracks from the API
+  /// GET /api/tracks
   static Future<List<dynamic>?> getTracks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    if (token == null) {
-      print('⚠️ No token found');
+    try {
+      final headers = await AuthService.getAuthHeaders();
+
+      final response = await http
+          .get(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/tracks'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // Handle different response formats
+        if (data is List) {
+          return data;
+        } else if (data is Map && data['tracks'] is List) {
+          return data['tracks'] as List;
+        } else if (data is Map && data['data'] is List) {
+          return data['data'] as List;
+        }
+        
+        return null;
+      } else {
+        print('Failed to fetch tracks: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error fetching tracks: $e');
       return null;
     }
+  }
 
-    print('🔐 Using Bearer Token: $token');
+  /// Fetch a specific track by ID
+  /// GET /api/tracks/{id}
+  static Future<Map<String, dynamic>?> getTrack(int trackId) async {
+    try {
+      final headers = await AuthService.getAuthHeaders();
 
-    final response = await http.get(
-      Uri.parse('$baseUrl/tracks'),
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token', // ✅ Must start with "Bearer "
-      },
-    );
+      final response = await http
+          .get(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/tracks/$trackId'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
 
-    print('📡 GET /tracks → Status: ${response.statusCode}');
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      print('❌ Error: ${response.body}');
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        print('Failed to fetch track: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error fetching track: $e');
       return null;
     }
   }

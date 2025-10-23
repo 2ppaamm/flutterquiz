@@ -9,15 +9,18 @@ class CommonHeader extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 63, // ✅ Fixed height
-      color: Colors.white, // ✅ Ensure white background
+      height: 60,
+      color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Image.asset(
-            'assets/logo.png',
-            height: 42,
+          Padding(
+            padding: const EdgeInsets.all(12.0), // ✅ Added margins around logo
+            child: Image.asset(
+              'assets/logo.png',
+              height: 35,
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.menu, color: Color(0xFF960000)),
@@ -31,6 +34,5 @@ class CommonHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(42); // ✅ Exact height
+  Size get preferredSize => const Size.fromHeight(100);
 }
-

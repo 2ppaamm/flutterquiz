@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'screens/auth/otp_request_screen.dart';
-import 'screens/bottom_nav_screen.dart';
+import 'screens/startup_splash_screen.dart';
+import 'screens/home_screen.dart';
 import 'screens/subject_select_screen.dart';
-import 'screens/pre_user_info_screen.dart';
-import 'screens/splash_screen.dart'; // For new user splash (octo.json)
-import 'screens/startup_splash_screen.dart'; // For startup splash (octo2.json)
+import 'screens/diagnostic/diagnostic_screen.dart';
+import 'screens/question_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -13,35 +11,15 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  Future<Map<String, dynamic>> _getInitialData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    final firstName = prefs.getString('first_name');
-    final dob = prefs.getString('dob');
-    final contact = prefs.getString('contact');
-    final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
 
-    bool isNewUser = (!isLoggedIn || token == null);
-    Widget nextScreen;
-
-    if (isLoggedIn && token != null) {
-      if (firstName == null || firstName.isEmpty || dob == null || dob.isEmpty) {
-        nextScreen = PreUserInfoScreen(contact: contact ?? '');
-      } else {
-        nextScreen = const BottomNavScreen();
-      }
-    } else {
-      nextScreen = const OTPRequestScreen();
-    }
-
-    return {
-      'isNewUser': isNewUser,
-      'nextScreen': nextScreen,
-    };
-  }
+class _MyAppState extends State<MyApp> {
+  bool _hasInitialized = false;
 
   @override
   Widget build(BuildContext context) {
@@ -49,23 +27,47 @@ class MyApp extends StatelessWidget {
       title: 'All Gifted Math',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: FutureBuilder<Map<String, dynamic>>(
-        future: _getInitialData(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
-          }
-
-          final isNewUser = snapshot.data!['isNewUser'] as bool;
-          final nextScreen = snapshot.data!['nextScreen'] as Widget;
-
-          return isNewUser
-              ? SplashScreen(nextScreen: nextScreen) // octo.json
-              : StartupSplashScreen(nextScreen: nextScreen); // octo2.json
-        },
-      ),
-      routes: {
-        '/subject-select': (_) => SubjectSelectScreen(),
+      initialRoute: '/',
+      
+      onGenerateRoute: (settings) {
+        // ✅ On first load, always go to splash regardless of URL
+        if (!_hasInitialized) {
+          _hasInitialized = true;
+          return MaterialPageRoute(
+            builder: (_) => const StartupSplashScreen(),
+          );
+        }
+        
+        // After initialization, handle routes normally
+        switch (settings.name) {
+          case '/':
+            return MaterialPageRoute(builder: (_) => const StartupSplashScreen());
+          case '/home':
+            return MaterialPageRoute(builder: (_) => const HomeScreen());
+          case '/subject-select':
+            return MaterialPageRoute(builder: (_) => SubjectSelectScreen());
+          case '/diagnostic':
+            return MaterialPageRoute(builder: (_) => const DiagnosticScreen());
+          case '/question':
+            final args = settings.arguments as Map<String, dynamic>?;
+            if (args != null) {
+              return MaterialPageRoute(
+                builder: (_) => QuestionScreen(
+                  trackId: args['trackId'] as int?,
+                  testId: args['testId'] as int?,
+                  trackName: args['trackName'] as String?,
+                  questions: args['questions'] as List<dynamic>,
+                  sessionType: args['sessionType'] as String? ?? 'track',
+                ),
+              );
+            }
+            break;
+        }
+        
+        // Unknown route - go to splash
+        return MaterialPageRoute(
+          builder: (_) => const StartupSplashScreen(),
+        );
       },
     );
   }
