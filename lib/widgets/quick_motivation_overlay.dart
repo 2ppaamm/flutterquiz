@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 class QuickMotivationOverlay extends StatefulWidget {
-  const QuickMotivationOverlay({Key? key}) : super(key: key);
+  const QuickMotivationOverlay({super.key});
 
   @override
   State<QuickMotivationOverlay> createState() => _QuickMotivationOverlayState();

@@ -5,7 +5,7 @@ import 'payment_selection_screen.dart';
 class PreSubscriberHomeScreen extends StatefulWidget {
   final String contact;
 
-  const PreSubscriberHomeScreen({required this.contact});
+  const PreSubscriberHomeScreen({super.key, required this.contact});
 
   @override
   _PreSubscriberHomeScreenState createState() => _PreSubscriberHomeScreenState();

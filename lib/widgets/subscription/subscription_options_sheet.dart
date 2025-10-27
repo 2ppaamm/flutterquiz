@@ -4,7 +4,7 @@ import '../../theme/app_button_styles.dart';
 import '../../services/payment_service.dart';
 
 class SubscriptionOptionsSheet extends StatefulWidget {
-  const SubscriptionOptionsSheet({Key? key}) : super(key: key);
+  const SubscriptionOptionsSheet({super.key});
 
   @override
   State<SubscriptionOptionsSheet> createState() =>
@@ -157,8 +157,8 @@ class _SubscriptionOptionsSheetState extends State<SubscriptionOptionsSheet> {
                       onPressed: () => _handleSubscribe(),
                       style: AppButtonStyles.primary.copyWith(
                         backgroundColor:
-                            MaterialStateProperty.all(AppColors.darkRed),
-                        shape: MaterialStateProperty.all(
+                            WidgetStateProperty.all(AppColors.darkRed),
+                        shape: WidgetStateProperty.all(
                           RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
@@ -359,7 +359,7 @@ class _SubscriptionOptionsSheetState extends State<SubscriptionOptionsSheet> {
                         ],
                       ),
                     ))
-                .toList(),
+                ,
           ],
         ),
       ),

@@ -15,20 +15,20 @@ class AppButtonStyles {
 
   // 🔴 Primary: Red
   static final primary = _base.copyWith(
-    backgroundColor: MaterialStateProperty.all(AppColors.darkRed),
-    foregroundColor: MaterialStateProperty.all(Colors.white),
+    backgroundColor: WidgetStateProperty.all(AppColors.darkRed),
+    foregroundColor: WidgetStateProperty.all(Colors.white),
   );
 
   // 🟧 Secondary: Peach
   static final secondary = _base.copyWith(
-    backgroundColor: MaterialStateProperty.all(const Color(0xFFFFD5C2)),
-    foregroundColor: MaterialStateProperty.all(Colors.black),
+    backgroundColor: WidgetStateProperty.all(const Color(0xFFFFD5C2)),
+    foregroundColor: WidgetStateProperty.all(Colors.black),
   );
 
   // 🟨 Tertiary: Light Yellow
   static final tertiary = _base.copyWith(
-    backgroundColor: MaterialStateProperty.all(const Color(0xFFFFE4B5)),
-    foregroundColor: MaterialStateProperty.all(Colors.black),
+    backgroundColor: WidgetStateProperty.all(const Color(0xFFFFE4B5)),
+    foregroundColor: WidgetStateProperty.all(Colors.black),
   );
 
   // ✅ Smaller base for question buttons
@@ -44,34 +44,34 @@ class AppButtonStyles {
   // Main submit button
   
   static final questionPrimary = _questionBase.copyWith(
-    backgroundColor: MaterialStateProperty.all(AppColors.darkRed),
-    foregroundColor: MaterialStateProperty.all(AppColors.white),
+    backgroundColor: WidgetStateProperty.all(AppColors.darkRed),
+    foregroundColor: WidgetStateProperty.all(AppColors.white),
   );
 
   static final questionCorrect = _questionBase.copyWith(
     backgroundColor:
-        MaterialStateProperty.all(const Color(0xFF50D200)), // green
-    foregroundColor: MaterialStateProperty.all(AppColors.white),
+        WidgetStateProperty.all(const Color(0xFF50D200)), // green
+    foregroundColor: WidgetStateProperty.all(AppColors.white),
   );
 
   static final questionTryAgain = _questionBase.copyWith(
-    backgroundColor: MaterialStateProperty.all(const Color(0xFFD80000)), // red
-    foregroundColor: MaterialStateProperty.all(AppColors.white),
+    backgroundColor: WidgetStateProperty.all(const Color(0xFFD80000)), // red
+    foregroundColor: WidgetStateProperty.all(AppColors.white),
   );
 
   static final questionSkip = _questionBase.copyWith(
     backgroundColor:
-        MaterialStateProperty.all(const Color(0xFFFFC0AB)), // peach
-    foregroundColor: MaterialStateProperty.all(AppColors.black),
+        WidgetStateProperty.all(const Color(0xFFFFC0AB)), // peach
+    foregroundColor: WidgetStateProperty.all(AppColors.black),
   );
 
   static final questionNext = _questionBase.copyWith(
-    backgroundColor: MaterialStateProperty.all(AppColors.darkRed),
-    foregroundColor: MaterialStateProperty.all(AppColors.white),
+    backgroundColor: WidgetStateProperty.all(AppColors.darkRed),
+    foregroundColor: WidgetStateProperty.all(AppColors.white),
   );
 
   static final numInputButton = _questionBase.copyWith(
-    backgroundColor: MaterialStateProperty.all(AppColors.lightGreyBackground),
-    foregroundColor: MaterialStateProperty.all(AppColors.white),
+    backgroundColor: WidgetStateProperty.all(AppColors.lightGreyBackground),
+    foregroundColor: WidgetStateProperty.all(AppColors.white),
   );
 }

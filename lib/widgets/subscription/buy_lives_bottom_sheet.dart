@@ -3,7 +3,7 @@ import '../../theme/app_colors.dart';
 import '../../services/upgrade_service.dart';
 
 class BuyLivesBottomSheet extends StatelessWidget {
-  const BuyLivesBottomSheet({Key? key}) : super(key: key);
+  const BuyLivesBottomSheet({super.key});
 
   @override
   Widget build(BuildContext context) {

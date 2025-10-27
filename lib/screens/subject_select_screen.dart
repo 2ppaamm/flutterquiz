@@ -13,6 +13,8 @@ import 'bottom_nav_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SubjectSelectScreen extends StatefulWidget {
+  const SubjectSelectScreen({super.key});
+
   @override
   _SubjectSelectScreenState createState() => _SubjectSelectScreenState();
 }

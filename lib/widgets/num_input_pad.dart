@@ -1,3 +1,4 @@
+import 'package:ag_math/theme/app_button_styles.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_font_styles.dart';
@@ -8,10 +9,10 @@ class NumInputPad extends StatelessWidget {
   final Function(String) onChanged;
 
   const NumInputPad({
-    Key? key,
+    super.key,
     required this.userInput,
     required this.onChanged,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -38,8 +39,16 @@ class NumInputPad extends StatelessWidget {
             controller: TextEditingController(text: userInput),
             readOnly: true,
             style: AppFontStyles.questionText,
-            decoration: AppInputStyles.type2primary.copyWith(
+            decoration: InputDecoration(
               hintText: 'Pop your answer in here!',
+              filled: true,
+              fillColor: AppColors.lightGreyBackground,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8.56),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             ),
           ),
         ),

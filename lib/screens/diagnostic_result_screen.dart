@@ -10,9 +10,9 @@ class DiagnosticResultScreen extends StatefulWidget {
   final Map<String, dynamic> result;
 
   const DiagnosticResultScreen({
-    Key? key,
+    super.key,
     required this.result,
-  }) : super(key: key);
+  });
 
   @override
   State<DiagnosticResultScreen> createState() => _DiagnosticResultScreenState();

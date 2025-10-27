@@ -22,7 +22,7 @@ class MathTextUtils {
     TextStyle? mathStyle,
   }) {
     final defaultTextStyle = textStyle ?? 
-      (AppFontStyles.bodyLarge?.copyWith(color: AppColors.black) ??
+      (AppFontStyles.bodyLarge.copyWith(color: AppColors.black) ??
         TextStyle(fontSize: 18, color: AppColors.black));
     final defaultMathStyle = mathStyle ?? 
       (AppFontStyles.bodyLarge ?? TextStyle(fontSize: 18));

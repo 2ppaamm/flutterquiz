@@ -6,15 +6,16 @@ import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'test_result_screen.dart';
 import '../widgets/out_of_lives_modal.dart';
+import '../widgets/lives_header.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_font_styles.dart';
 import '../theme/app_button_styles.dart';
-import '../widgets/platform_network_image.dart';
 import '../utils/math_text_utils.dart';
 import '../utils/question_blank_utils.dart';
 import '../widgets/common_question_widgets.dart';
 import 'bottom_nav_screen.dart';
 import '../../config.dart';
+import '../widgets/question_feedback_widget.dart';
 
 class QuestionScreen extends StatefulWidget {
   final int? trackId;
@@ -41,6 +42,9 @@ class _QuestionScreenState extends State<QuestionScreen>
   late DateTime startTime;
   int currentIndex = 0;
   int lives = 5;
+  int maxLives = 5;
+  bool unlimited = false;
+  int? nextLifeInSeconds;
   bool hasAnswered = false;
   bool isCorrect = false;
   String? selectedAnswer;
@@ -66,6 +70,7 @@ class _QuestionScreenState extends State<QuestionScreen>
     _setupAnimations();
     _resetQuestionState();
     _initializeQuestion();
+    _loadUserData();
   }
 
 // Update _reduceLives - same logic
@@ -87,6 +92,7 @@ class _QuestionScreenState extends State<QuestionScreen>
       await prefs.setInt('lives', currentLives - 1);
       setState(() {
         lives = currentLives - 1;
+        unlimited = isUnlimited || isSubscriber;
       });
 
       if (lives <= 0) {
@@ -145,6 +151,9 @@ class _QuestionScreenState extends State<QuestionScreen>
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       lives = prefs.getInt('lives') ?? 5;
+      maxLives = prefs.getInt('max_lives') ?? 5;
+      unlimited = prefs.getBool('unlimited') ?? false;
+      nextLifeInSeconds = prefs.getInt('next_life_in_seconds');
     });
   }
 
@@ -159,7 +168,9 @@ class _QuestionScreenState extends State<QuestionScreen>
   }
 
   void _clearBlankControllers() {
-    _blankControllers.values.forEach((controller) => controller.dispose());
+    for (var controller in _blankControllers.values) {
+      controller.dispose();
+    }
     _blankControllers.clear();
     _activeBlank = null;
     fillInAnswers.clear();
@@ -486,7 +497,7 @@ class _QuestionScreenState extends State<QuestionScreen>
     );
   }
 
-  // ✅ UPDATED: Hide lives for subscribers
+  // ✅ UPDATED: LivesHeader inline (where flag was)
   Widget _buildHeader() {
     final progress = (currentIndex + 1) / widget.questions.length;
     final question = _getQuestionData(currentIndex);
@@ -516,12 +527,20 @@ class _QuestionScreenState extends State<QuestionScreen>
                 onPressed: _showExitDialog,
               ),
               const Spacer(),
-              IconButton(
-                icon: Icon(Icons.flag_outlined,
-                    size: 24, color: AppColors.darkGrey),
-                onPressed: _showReportDialog,
-                tooltip: 'Report Issue',
-              ),
+              // ✅ LivesHeader inline (replaces flag button)
+              if (!unlimited)
+                LivesHeader(
+                  lives: lives,
+                  maxLives: maxLives,
+                  unlimited: unlimited,
+                  nextLifeInSeconds: nextLifeInSeconds,
+                  onTimerUpdate: (remaining) {
+                    setState(() {
+                      nextLifeInSeconds = remaining;
+                    });
+                  },
+                ),
+              const SizedBox(width: 8),
               if (hasVideo)
                 Stack(
                   clipBehavior: Clip.none,
@@ -1296,7 +1315,7 @@ class _QuestionScreenState extends State<QuestionScreen>
         } else {
           // OLD <input> style - check if any answer is filled
           canSubmit = fillInAnswers.values
-              .any((answer) => answer?.trim().isNotEmpty ?? false);
+              .any((answer) => answer.trim().isNotEmpty ?? false);
 
           print('🎯 FIB OLD style - canSubmit: $canSubmit');
           print('🎯 Fill in answers: $fillInAnswers');
@@ -1321,7 +1340,7 @@ class _QuestionScreenState extends State<QuestionScreen>
               ? AppButtonStyles.questionPrimary
               : AppButtonStyles.questionPrimary.copyWith(
                   backgroundColor:
-                      MaterialStateProperty.all(AppColors.darkGreyText),
+                      WidgetStateProperty.all(AppColors.darkGreyText),
                 ),
           child: const Text('Check Answer'),
         ),
@@ -1352,101 +1371,6 @@ class _QuestionScreenState extends State<QuestionScreen>
     setState(() {
       selectedAnswer = answer;
     });
-  }
-
-  void _submitAnswer() {
-    final question = _getQuestionData(currentIndex);
-    final questionText = question['question'] ?? '';
-    final typeId = question['type_id'];
-    final questionId = question['id'];
-
-    bool correct = false;
-    dynamic userAnswer;
-
-    // ✅ FIXED: Use type_id to determine question type
-    if (typeId == 2) {
-      // Type 2: Fill-in-blank
-      final hasBlanks = QuestionBlankUtils.hasBlanks(questionText);
-
-      if (hasBlanks) {
-        // NEW [0] style blanks
-        final userAnswers = <int, String>{};
-        _blankControllers.forEach((key, controller) {
-          userAnswers[key] = controller.text.trim();
-        });
-
-        correct = QuestionBlankUtils.validateAnswers(
-          userAnswers,
-          {
-            'answer0': question['answer0']?.toString(),
-            'answer1': question['answer1']?.toString(),
-            'answer2': question['answer2']?.toString(),
-            'answer3': question['answer3']?.toString(),
-          },
-        );
-
-        final answerList = <String?>[null, null, null, null];
-        for (int i = 0; i < 4; i++) {
-          answerList[i] = userAnswers[i];
-        }
-        userAnswer = answerList;
-      } else {
-        // OLD <input> style
-        final indexedAnswers = <int, String?>{};
-        for (final entry in fillInAnswers.entries) {
-          final keyParts = entry.key.split('_');
-          if (keyParts.length >= 2) {
-            final index = int.tryParse(keyParts.last);
-            if (index != null) {
-              indexedAnswers[index] = entry.value?.trim();
-            }
-          }
-        }
-
-        final answerList = <String?>[null, null, null, null];
-        for (int i = 0; i < 4; i++) {
-          answerList[i] = indexedAnswers[i];
-        }
-        userAnswer = answerList;
-
-        correct = false;
-        for (int i = 0; i < 4; i++) {
-          final correctAns = question['answer$i']?.toString()?.trim();
-          final userAns = answerList[i]?.trim();
-          if (correctAns != null &&
-              correctAns.isNotEmpty &&
-              userAns == correctAns) {
-            correct = true;
-            break;
-          }
-        }
-      }
-    } else {
-      // Type 1: Multiple choice
-      correct = _isCorrectAnswer(selectedAnswer ?? '');
-      final options =
-          List.generate(4, (i) => question['answer$i']?.toString() ?? '');
-      final selectedIndex = options.indexOf(selectedAnswer ?? '');
-      userAnswer = selectedIndex >= 0 ? selectedIndex.toString() : '0';
-    }
-
-    setState(() {
-      hasAnswered = true;
-      isCorrect = correct;
-    });
-
-    if (isCorrect) {
-      _feedbackAnimationController.forward();
-    } else {
-      _reduceLives();
-    }
-
-    submittedQuestionIds.add(questionId);
-    if (typeId == 2) {
-      submittedAnswers.add(userAnswer);
-    } else {
-      submittedAnswers.add([userAnswer, null, null, null]);
-    }
   }
 
   void _nextQuestion() {
@@ -1611,6 +1535,142 @@ class _QuestionScreenState extends State<QuestionScreen>
     super.dispose();
   }
 
+ void _submitAnswer() {
+  final question = _getQuestionData(currentIndex);
+  final questionText = question['question'] ?? '';
+  final typeId = question['type_id'];
+  final questionId = question['id'];
+
+  bool correct = false;
+  dynamic userAnswer;
+
+  // ✅ FIXED: Use type_id to determine question type
+  if (typeId == 2) {
+    // Type 2: Fill-in-blank
+    final hasBlanks = QuestionBlankUtils.hasBlanks(questionText);
+
+    if (hasBlanks) {
+      // NEW [0] style blanks
+      final userAnswers = <int, String>{};
+      _blankControllers.forEach((key, controller) {
+        userAnswers[key] = controller.text.trim();
+      });
+
+      correct = QuestionBlankUtils.validateAnswers(
+        userAnswers,
+        {
+          'answer0': question['answer0']?.toString(),
+          'answer1': question['answer1']?.toString(),
+          'answer2': question['answer2']?.toString(),
+          'answer3': question['answer3']?.toString(),
+        },
+      );
+
+      final answerList = <String?>[null, null, null, null];
+      for (int i = 0; i < 4; i++) {
+        answerList[i] = userAnswers[i];
+      }
+      userAnswer = answerList;
+    } else {
+      // OLD <input> style
+      final indexedAnswers = <int, String?>{};
+      for (final entry in fillInAnswers.entries) {
+        final keyParts = entry.key.split('_');
+        if (keyParts.length >= 2) {
+          final index = int.tryParse(keyParts.last);
+          if (index != null) {
+            indexedAnswers[index] = entry.value.trim();
+          }
+        }
+      }
+
+      final answerList = <String?>[null, null, null, null];
+      for (int i = 0; i < 4; i++) {
+        answerList[i] = indexedAnswers[i];
+      }
+      userAnswer = answerList;
+
+      correct = false;
+      for (int i = 0; i < 4; i++) {
+        final correctAns = question['answer$i']?.toString().trim();
+        final userAns = answerList[i]?.trim();
+        if (correctAns != null &&
+            correctAns.isNotEmpty &&
+            userAns == correctAns) {
+          correct = true;
+          break;
+        }
+      }
+    }
+  } else {
+    // Type 1: Multiple choice
+    correct = _isCorrectAnswer(selectedAnswer ?? '');
+    final options =
+        List.generate(4, (i) => question['answer$i']?.toString() ?? '');
+    final selectedIndex = options.indexOf(selectedAnswer ?? '');
+    userAnswer = selectedIndex >= 0 ? selectedIndex.toString() : '0';
+  }
+
+  setState(() {
+    hasAnswered = true;
+    isCorrect = correct;
+  });
+
+  _feedbackAnimationController.forward().then((_) {
+    _feedbackAnimationController.reverse();
+  });
+
+  if (!correct) {
+    _reduceLives();
+  }
+
+  submittedQuestionIds.add(questionId);
+  submittedAnswers.add(userAnswer);
+}
+
+String _getUserAnswerDisplay() {
+  final question = _getQuestionData(currentIndex);
+  final typeId = question['type_id'];
+  
+  if (typeId == 1 || typeId == 3) {
+    // Multiple choice or True/False
+    return selectedAnswer ?? 'No answer provided';
+  } else if (typeId == 2) {
+    // Fill-in-the-blank
+    if (_blankControllers.isNotEmpty) {
+      final answers = _blankControllers.values
+          .map((c) => c.text)
+          .where((text) => text.isNotEmpty)
+          .toList();
+      return answers.isNotEmpty ? answers.join(', ') : 'No answer provided';
+    } else if (fillInAnswers.isNotEmpty) {
+      final answers = fillInAnswers.values
+          .where((v) => v.isNotEmpty)
+          .toList();
+      return answers.isNotEmpty ? answers.join(', ') : 'No answer provided';
+    }
+  }
+  return 'No answer provided';
+}
+
+Widget _buildFeedbackArea() {
+  if (!hasAnswered) {
+    return const SizedBox.shrink();
+  }
+
+  final question = _getQuestionData(currentIndex);
+  final correctAnswer = question['correct_answer']?.toString();
+  final explanation = question['explanation']?.toString();
+  final userAnswer = _getUserAnswerDisplay();
+
+  return QuestionFeedbackWidget(
+    isCorrect: isCorrect,
+    userAnswer: userAnswer,
+    correctAnswer: correctAnswer,
+    explanation: explanation,
+    onReportIssue: _showReportDialog,
+  );
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1628,6 +1688,7 @@ class _QuestionScreenState extends State<QuestionScreen>
                     _buildQuestion(),
                     const SizedBox(height: 24),
                     _buildAnswerArea(),
+                    _buildFeedbackArea(),
                     const SizedBox(height: 32),
                   ],
                 ),

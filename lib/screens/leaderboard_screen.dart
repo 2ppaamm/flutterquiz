@@ -3,7 +3,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_font_styles.dart';
 
 class LeaderboardScreen extends StatelessWidget {
-  const LeaderboardScreen({Key? key}) : super(key: key);
+  const LeaderboardScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -4,7 +4,7 @@ import '../../services/upgrade_service.dart';
 import '../../services/payment_service.dart';
 
 class BuyLivesBottomSheet extends StatelessWidget {
-  const BuyLivesBottomSheet({Key? key}) : super(key: key);
+  const BuyLivesBottomSheet({super.key});
 
   @override
   Widget build(BuildContext context) {

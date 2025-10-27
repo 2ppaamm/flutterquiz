@@ -265,7 +265,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            '$firstName ${lastName}'.trim(),
+            '$firstName $lastName'.trim(),
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,

@@ -21,10 +21,10 @@ class OTPRequestScreen extends StatefulWidget {
   final bool showOTPField;
 
   const OTPRequestScreen({
-    Key? key,
+    super.key,
     this.prefilledEmail,
     this.showOTPField = false,
-  }) : super(key: key);
+  });
 
   @override
   _OTPRequestScreenState createState() => _OTPRequestScreenState();

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../theme/app_button_styles.dart';
-import '../theme/app_font_styles.dart';
 import '../theme/app_colors.dart';
 import 'bottom_nav_screen.dart';
 

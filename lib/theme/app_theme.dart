@@ -13,8 +13,6 @@ class AppTheme {
         onPrimary: AppColors.white,
         secondary: AppColors.pink,
         onSecondary: AppColors.black,
-        background: AppColors.white,
-        onBackground: AppColors.black,
         surface: AppColors.tileGrey,
         onSurface: AppColors.darkGreyText,
         error: Colors.red,

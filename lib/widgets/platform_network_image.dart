@@ -13,12 +13,12 @@ class PlatformNetworkImage extends StatelessWidget {
   final BoxFit fit;
 
   const PlatformNetworkImage({
-    Key? key,
+    super.key,
     required this.imageUrl,
     this.height = 200,
     this.width,
     this.fit = BoxFit.contain,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

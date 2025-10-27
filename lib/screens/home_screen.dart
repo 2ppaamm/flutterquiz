@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../theme/app_button_styles.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_font_styles.dart';
 import '../services/user_service.dart';
+import '../services/diagnostic_service.dart';
 import '../services/question_service.dart';
-import '../services/upgrade_service.dart';
 import 'question_screen.dart';
 import '../widgets/out_of_lives_modal.dart';
+import 'upgrade_screen.dart';
+import '../widgets/diagnostic_unavailable_dialog.dart'; 
+import 'diagnostic/diagnostic_result_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -26,6 +30,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSubscriber = false;
   bool _hasStartedKiasuPath = false;
   bool _isLoading = true;
+
+  // ✅ NEW: Diagnostic eligibility state
+  bool _canTakeDiagnostic = true;
+  String _diagnosticMessage = '';
+  int _daysRemaining = 0;
+  bool _diagnosticPremium = false;
 
   @override
   void initState() {
@@ -45,8 +55,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Save to SharedPreferences
       await prefs.setBool('is_subscriber', isSubscriber);
-      await prefs.setBool('has_started_kiasu_path',
-          response['has_started_kiasu_path'] == 1 || response['has_started_kiasu_path'] == true);
+      await prefs.setBool(
+          'has_started_kiasu_path',
+          response['has_started_kiasu_path'] == 1 ||
+              response['has_started_kiasu_path'] == true);
       await prefs.setString('first_name', response['first_name'] ?? 'Student');
       await prefs.setInt('lives', response['lives'] ?? 0);
       await prefs.setInt('kudos', response['kudos'] ?? 0);
@@ -54,6 +66,25 @@ class _HomeScreenState extends State<HomeScreen> {
       await prefs.setInt('total_questions', response['total_questions'] ?? 0);
       await prefs.setInt('topics_practiced', response['topics_practiced'] ?? 0);
       await prefs.setInt('overall_maxile', response['overall_maxile'] ?? 0);
+
+      // ✅ NEW: Save diagnostic eligibility data
+      if (response['diagnostic'] != null) {
+        final diagnostic = response['diagnostic'];
+        await prefs.setBool(
+            'can_take_diagnostic', diagnostic['can_take'] ?? true);
+        await prefs.setString(
+            'diagnostic_message', diagnostic['message'] ?? '');
+        await prefs.setInt(
+            'diagnostic_days_remaining', diagnostic['days_remaining'] ?? 0);
+        await prefs.setBool(
+            'diagnostic_premium', diagnostic['is_premium'] ?? false);
+      }
+
+      // ✅ NEW: Save last diagnostic result if available
+      if (response['last_diagnostic_result'] != null) {
+        final lastResultJson = json.encode(response['last_diagnostic_result']);
+        await prefs.setString('last_diagnostic_result', lastResultJson);
+      }
     }
 
     // Update state
@@ -66,8 +97,81 @@ class _HomeScreenState extends State<HomeScreen> {
       _kudos = prefs.getInt('kudos') ?? 0;
       _isSubscriber = prefs.getBool('is_subscriber') ?? false;
       _hasStartedKiasuPath = prefs.getBool('has_started_kiasu_path') ?? false;
+
+      // ✅ NEW: Load diagnostic eligibility
+      _canTakeDiagnostic = prefs.getBool('can_take_diagnostic') ?? true;
+      _diagnosticMessage = prefs.getString('diagnostic_message') ?? '';
+      _daysRemaining = prefs.getInt('diagnostic_days_remaining') ?? 0;
+      _diagnosticPremium = prefs.getBool('diagnostic_premium') ?? false;
+
       _isLoading = false;
     });
+  }
+
+  // ✅ NEW: Handle diagnostic button tap
+  void _handleDiagnosticTap() {
+    if (!_canTakeDiagnostic) {
+      _showDiagnosticRestrictionDialog();
+      return;
+    }
+
+    // Proceed to diagnostic
+    Navigator.pushNamed(context, '/diagnostic').then((_) {
+      loadFromStorage(); // Refresh data after returning
+    });
+  }
+
+  // ✅ UPDATED: Show improved diagnostic restriction dialog
+  void _showDiagnosticRestrictionDialog() {
+    // Calculate next available date from days remaining
+    final nextDate = DateTime.now().add(Duration(days: _daysRemaining));
+
+    showDiagnosticUnavailableDialog(
+      context: context,
+      nextAvailableDate: nextDate,
+      
+      // Button 1: View Last Results
+      onViewLastResults: () async {
+        // Show loading
+        showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => Center(
+                child: CircularProgressIndicator(color: AppColors.darkRed)));
+
+        // Call your existing service
+        final result = await DiagnosticService.getLastDiagnostic();
+        Navigator.pop(context);
+
+        if (result != null) {
+          Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DiagnosticResultScreen(result: result),
+              ));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('No previous diagnostic results found')),
+          );
+        }
+      },
+      
+      // Button 2: Explore Topics (Browse Topics)
+      onExploreTopics: () {
+        // Navigate to browse/explore topics screen
+        Navigator.pushNamed(context, '/subject-select');
+      },
+      
+      // Button 3: Upgrade to Premium
+      onUpgradeToPremium: () {
+        // Navigate to upgrade screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const UpgradeScreen()),
+        );
+      },
+    );
   }
 
   void _handleKiasuPathTap() async {
@@ -141,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
             trackName: 'Kiasu Path',
             testId: testId,
             questions: questions,
-            sessionType: 'kiasu_path', // ← ADDED THIS LINE
+            sessionType: 'kiasu_path',
           ),
         ),
       ).then((_) {
@@ -205,12 +309,17 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Text('Not Now', style: AppFontStyles.buttonSecondary),
           ),
           ElevatedButton(
+            style: AppButtonStyles.primary,
             onPressed: () {
               Navigator.pop(context);
-              UpgradeService.showSubscriptionOptions(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => UpgradeScreen(),
+                ),
+              );
             },
-            style: AppButtonStyles.primary,
-            child: const Text('Upgrade Now'),
+            child: Text('Upgrade Now', style: AppFontStyles.buttonPrimary),
           ),
         ],
       ),
@@ -223,11 +332,11 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Text('🇸🇬', style: TextStyle(fontSize: 28)),
-            const SizedBox(width: 12),
+            Icon(Icons.info_outline, color: AppColors.darkRed, size: 24),
+            const SizedBox(width: 8),
             Expanded(
               child:
-                  Text('What is "Kiasu"?', style: AppFontStyles.headingMedium),
+                  Text('About Kiasu Path', style: AppFontStyles.headingMedium),
             ),
           ],
         ),
@@ -236,63 +345,27 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Kiasu (怕输) is a Singlish term from Hokkien meaning "fear of losing out."',
+              'Kiasu Path is an AI-powered adaptive learning system that creates a personalized practice plan just for you.',
               style: AppFontStyles.bodyMedium,
             ),
             const SizedBox(height: 12),
             Text(
-              'In Singapore and Malaysia, being kiasu means you\'re always striving to be ahead - never wanting to fall behind!',
-              style: AppFontStyles.bodyMedium,
+              'How it works:',
+              style: AppFontStyles.bodyMedium
+                  .copyWith(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.darkRed.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.auto_awesome,
-                          color: AppColors.darkRed, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Kiasu Path uses AI to:',
-                        style: AppFontStyles.bodyMedium.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.darkRed,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _buildBenefit('Identify your knowledge gaps'),
-                  _buildBenefit('Create personalized practice plans'),
-                  _buildBenefit('Adapt difficulty to your progress'),
-                  _buildBenefit('Ensure you never fall behind!'),
-                ],
-              ),
-            ),
+            const SizedBox(height: 8),
+            _buildInfoPoint('📊 Analyzes your current skill level'),
+            _buildInfoPoint('🎯 Identifies knowledge gaps'),
+            _buildInfoPoint('🚀 Selects optimal questions for growth'),
+            _buildInfoPoint('⚡ Adapts in real-time to your progress'),
           ],
         ),
         actions: [
-          if (!_isSubscriber)
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                UpgradeService.showSubscriptionOptions(context);
-              },
-              style: AppButtonStyles.primary,
-              child: const Text('Unlock Kiasu Path'),
-            )
-          else
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Got it!', style: AppFontStyles.buttonSecondary),
-            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Got it', style: AppFontStyles.buttonSecondary),
+          ),
         ],
       ),
     );
@@ -303,13 +376,20 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          Icon(Icons.check_circle, size: 16, color: AppColors.success),
+          Icon(Icons.check_circle, size: 16, color: AppColors.darkRed),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(text, style: AppFontStyles.caption),
+            child: Text(text, style: AppFontStyles.bodyMedium),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildInfoPoint(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 8),
+      child: Text('• $text', style: AppFontStyles.bodyMedium),
     );
   }
 
@@ -317,57 +397,35 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.lightGreyBackground,
         body: Center(
           child: CircularProgressIndicator(color: AppColors.darkRed),
         ),
       );
     }
 
-    // Determine button title and state
-    final kiasuTitle =
-        _hasStartedKiasuPath ? "Continue Kiasu Path" : "Kiasu Path";
-    final kiasuSubtitle =
-        _isSubscriber ? "AI-optimized practice" : "Unlock with Premium";
-    final isKiasuLocked = !_isSubscriber;
+    final bool isKiasuLocked = !_isSubscriber;
+    final String kiasuTitle =
+        _hasStartedKiasuPath ? 'Continue Kiasu Path' : 'Start Kiasu Path';
+    final String kiasuSubtitle =
+        _hasStartedKiasuPath ? 'AI-powered practice' : 'AI learns your level';
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.lightGreyBackground,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: 40),
 
-              // Kudos display in top right
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Icon(
-                      Icons.monetization_on,
-                      color: Colors.amber,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$_kudos',
-                      style: AppFontStyles.bodyMedium.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkGreyText,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // Mascot Character Placeholder
+              // Avatar Placeholder
               Container(
-                height: 180,
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.pink.withOpacity(0.3),
+                ),
                 child: Center(
                   child: Icon(
                     Icons.account_circle,
@@ -400,7 +458,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: isKiasuLocked
                               ? AppButtonStyles.primary
                               : ElevatedButton.styleFrom(
-                                  // ✅ Override when unlocked
                                   backgroundColor: AppColors.darkRed,
                                   foregroundColor: Colors.white,
                                   padding:
@@ -464,28 +521,46 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Test Your Skills Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: AppButtonStyles.secondary,
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/diagnostic');
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Column(
-                            children: [
-                              Text(
-                                "Test Your Skills",
-                                style: AppFontStyles.buttonSecondary,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "Diagnostic Test",
-                                style: AppFontStyles.buttonSecondarySubtitle,
-                              ),
-                            ],
+                    // ✅ UPDATED: Test Your Skills Button (with restriction handling)
+                    Opacity(
+                      opacity: _canTakeDiagnostic ? 1.0 : 0.5,
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: AppButtonStyles.secondary,
+                          onPressed: _handleDiagnosticTap, // ✅ NEW handler
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      "Test Your Skills",
+                                      style: AppFontStyles.buttonSecondary,
+                                    ),
+                                    // ✅ Show lock icon if restricted
+                                    if (!_canTakeDiagnostic) ...[
+                                      const SizedBox(width: 6),
+                                      Icon(
+                                        Icons.lock,
+                                        size: 16,
+                                        color: AppColors.darkGreyText,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  // ✅ Show days remaining if restricted
+                                  _canTakeDiagnostic
+                                      ? "Diagnostic Test"
+                                      : "Available in $_daysRemaining ${_daysRemaining == 1 ? 'day' : 'days'}",
+                                  style: AppFontStyles.buttonSecondarySubtitle,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

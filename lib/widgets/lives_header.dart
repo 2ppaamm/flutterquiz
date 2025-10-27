@@ -11,13 +11,13 @@ class LivesHeader extends StatefulWidget {
   final Function(int)? onTimerUpdate;
 
   const LivesHeader({
-    Key? key,
+    super.key,
     required this.lives,
     required this.maxLives,
     this.unlimited = false,
     this.nextLifeInSeconds,
     this.onTimerUpdate,
-  }) : super(key: key);
+  });
 
   @override
   State<LivesHeader> createState() => _LivesHeaderState();

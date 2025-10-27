@@ -6,7 +6,7 @@ import 'profile_screen.dart';
 import '../theme/app_colors.dart';
 
 class BottomNavScreen extends StatefulWidget {
-  const BottomNavScreen({Key? key}) : super(key: key);
+  const BottomNavScreen({super.key});
 
   @override
   State<BottomNavScreen> createState() => _BottomNavScreenState();
@@ -16,7 +16,7 @@ class _BottomNavScreenState extends State<BottomNavScreen> {
   int _currentIndex = 0;
 
   List<Widget> get _screens => [
-        const HomeScreen(),  // ✅ Your existing home screen = Path
+        HomeScreen(),
         const ExploreScreen(),
         const LeaderboardScreen(),
         const ProfileScreen(),

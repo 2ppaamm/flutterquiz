@@ -11,9 +11,9 @@ class DiagnosticResultScreen extends StatefulWidget {
   final Map<String, dynamic> result;
 
   const DiagnosticResultScreen({
-    Key? key,
+    super.key,
     required this.result,
-  }) : super(key: key);
+  });
 
   @override
   State<DiagnosticResultScreen> createState() => _DiagnosticResultScreenState();
@@ -22,8 +22,10 @@ class DiagnosticResultScreen extends StatefulWidget {
 class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
     with TickerProviderStateMixin {
   late AnimationController _numberController;
+  late AnimationController _gaugeController;
   late AnimationController _confettiController;
   int _animatedMaxile = 0;
+  double _animatedGaugeProgress = 0.0;
   bool _showDetailedResults = false;
 
   @override
@@ -35,12 +37,35 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
   void _setupAnimations() {
     final summary = _getSummary();
     final targetMaxile = (summary?['average_maxile'] ?? 0).toDouble();
+    final targetProgress = (targetMaxile / 700).clamp(0.0, 1.0);
 
     // Confetti animation
     _confettiController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     );
+
+    // Gauge progress animation (separate from number)
+    _gaugeController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+
+    final gaugeAnimation = Tween<double>(
+      begin: 0.0,
+      end: targetProgress,
+    ).animate(
+      CurvedAnimation(
+        parent: _gaugeController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+
+    gaugeAnimation.addListener(() {
+      setState(() {
+        _animatedGaugeProgress = gaugeAnimation.value;
+      });
+    });
 
     // Number animation
     _numberController = AnimationController(
@@ -66,11 +91,14 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
 
     // Start animations with delays
     Future.delayed(const Duration(milliseconds: 300), () {
-      _confettiController.forward();
+      if (mounted) _confettiController.forward();
     });
     
     Future.delayed(const Duration(milliseconds: 800), () {
-      _numberController.forward();
+      if (mounted) {
+        _gaugeController.forward();
+        _numberController.forward();
+      }
     });
 
     // Auto-show detailed results after 3 seconds
@@ -86,6 +114,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
   @override
   void dispose() {
     _numberController.dispose();
+    _gaugeController.dispose();
     _confettiController.dispose();
     super.dispose();
   }
@@ -105,11 +134,9 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
     return AppColors.levelBeginner;
   }
 
-  String _getLevelLabel(int maxile) {
-    if (maxile >= 500) return 'Advanced';
-    if (maxile >= 300) return 'Growing';
-    if (maxile >= 200) return 'Building';
-    return 'Beginner';
+  // Get level name from API response (don't hardcode)
+  String _getLevelName() {
+    return widget.result['level_name'] as String? ?? 'Learning';
   }
 
   @override
@@ -170,27 +197,22 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                         
                         const SizedBox(height: 32),
                         
-                        // Big Circular Gauge
+                        // Big Circular Gauge - FIXED
                         SizedBox(
                           width: 200,
                           height: 200,
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
-                              // Animated Circle
-                              AnimatedBuilder(
-                                animation: _numberController,
-                                builder: (context, child) {
-                                  return CustomPaint(
-                                    size: const Size(200, 200),
-                                    painter: CircularGaugePainter(
-                                      progress: (_numberController.value * (averageMaxile / 700)).clamp(0.0, 1.0),
-                                      color: Colors.white,
-                                      backgroundColor: Colors.white.withOpacity(0.2),
-                                      strokeWidth: 18,
-                                    ),
-                                  );
-                                },
+                              // Animated Circle - now uses separate gauge controller
+                              CustomPaint(
+                                size: const Size(200, 200),
+                                painter: CircularGaugePainter(
+                                  progress: _animatedGaugeProgress,
+                                  color: Colors.white,
+                                  backgroundColor: Colors.white.withOpacity(0.2),
+                                  strokeWidth: 18,
+                                ),
                               ),
                               // Number in center
                               Column(
@@ -223,7 +245,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
-                                      _getLevelLabel(_animatedMaxile),
+                                      _getLevelName(),
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
@@ -364,7 +386,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                     style: AppButtonStyles.primary,
                     child: Text(
                       'Continue Learning Journey 🚀',
-                      style: AppFontStyles.buttonPrimary?.copyWith(fontSize: 18),
+                      style: AppFontStyles.buttonPrimary.copyWith(fontSize: 18),
                     ),
                   ),
                 ),
@@ -422,6 +444,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
     final fieldName = field['field_name'] ?? 'Unknown';
     final maxile = field['maxile_level'] ?? 0;
     final levelDesc = field['level_description'] ?? '';
+    final levelName = field['level_name'] ?? 'Learning';  // Get level name from API
     final ageComp = field['age_comparison'] as Map<String, dynamic>?;
     final nextMilestone = field['next_milestone'] as Map<String, dynamic>?;
     
@@ -489,7 +512,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  _getLevelLabel((maxile * animValue).round()),
+                                  levelName,
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,

@@ -5,7 +5,7 @@ import 'subject_select_screen.dart';
 import 'diagnostic/diagnostic_screen.dart';
 
 class ExploreScreen extends StatelessWidget {
-  const ExploreScreen({Key? key}) : super(key: key);
+  const ExploreScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

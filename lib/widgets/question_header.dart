@@ -13,13 +13,13 @@ class QuestionHeader extends StatelessWidget {
   final Map<String, dynamic>? skill;
 
   const QuestionHeader({
-    Key? key,
+    super.key,
     required this.currentIndex,
     required this.totalQuestions,
     required this.onClose,
     this.videos,
     this.skill,
-  }) : super(key: key);
+  });
 
   Future<int> _getLives() async {
     final prefs = await SharedPreferences.getInstance();

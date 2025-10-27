@@ -16,22 +16,23 @@ dependencies:
   rive: ^0.13.20
   video_player: ^2.7.2
   lottie: ^3.1.0
+  intl: ^0.20.2
 
   flutter_html: ^3.0.0
   flutter_html_math: ^3.0.0
-  flutter_math_fork: ^0.7.5
+  flutter_math_fork: ^0.7.4
   flutter_spinbox: ^0.13.1
-  flutter_stripe: ^11.5.0
+  flutter_stripe: ^12.0.2
   google_fonts: ^6.1.0
   url_launcher: ^6.2.5
   chewie: ^1.7.0
   in_app_purchase: ^3.1.11  # For future native IAP
-  purchases_flutter: ^6.0.0  # RevenueCat (when ready)
+  purchases_flutter: ^9.9.0  # RevenueCat (when ready)
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true

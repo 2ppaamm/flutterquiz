@@ -6,13 +6,11 @@ import '../../theme/app_font_styles.dart';
 import '../../theme/app_button_styles.dart';
 import '../../utils/math_text_utils.dart';
 import '../../widgets/common_question_widgets.dart';
-import '../../widgets/out_of_lives_modal.dart';
-import '../../widgets/lives_header.dart';
 import 'diagnostic_result_screen.dart';
 import '../../widgets/html_latex_renderer.dart';
 
 class DiagnosticScreen extends StatefulWidget {
-  const DiagnosticScreen({Key? key}) : super(key: key);
+  const DiagnosticScreen({super.key});
 
   @override
   State<DiagnosticScreen> createState() => _DiagnosticScreenState();
@@ -22,7 +20,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
   // Session & Questions
   int? _sessionId;
   List<DiagnosticQuestion> _questions = [];
-  List<DiagnosticAnswer> _answers = [];
+  final List<DiagnosticAnswer> _answers = [];
   int _currentQuestionIndex = 0;
   int? _selectedOptionId;
 
@@ -30,23 +28,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
   bool _loading = true;
   bool _submitting = false;
   String? _error;
-  bool _hasShownModal = false;
-
-  // Lives Data
-  int _lives = 0;
-  int _maxLives = 5;
-  bool _unlimitedLives = false;
-  bool _canAnswer = true;
-  int? _nextLifeInSeconds;
-  String? _nextLifeAt;
 
   @override
   void initState() {
     super.initState();
     _startDiagnostic();
   }
-
-  // ========== API METHODS ==========
 
   Future<void> _startDiagnostic() async {
     if (!mounted) return;
@@ -69,164 +56,184 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
         return;
       }
 
-      // Handle out of lives response
-      if (result['ok'] == false) {
-        _updateLivesData(result);
-        setState(() {
-          _loading = false;
-        });
-        return;
-      }
+      final responseType = DiagnosticService.getResponseType(result);
 
-      // Success - load questions
-      _sessionId = result['session_id'] as int;
-      _updateLivesData(result);
-      _loadQuestions(result['questions'] as List);
-    } catch (e) {
-      print('❌ Error starting diagnostic: $e');
-      if (!mounted) return;
-      setState(() {
-        _error = 'Something went wrong. Please try again.';
-        _loading = false;
-      });
-    }
-  }
+      switch (responseType) {
+        case DiagnosticResponseType.cooldown:
+          // ✅ Handle 30-day cooldown
+          _showCooldownDialog(result);
+          setState(() => _loading = false);
+          break;
 
-  Future<void> _submitBatch() async {
-    if (_sessionId == null || !mounted) return;
+        case DiagnosticResponseType.questions:
+          final questionsData = result['questions'] as List?;
+          if (questionsData == null || questionsData.isEmpty) {
+            setState(() {
+              _error = 'No questions available';
+              _loading = false;
+            });
+            return;
+          }
 
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
+          setState(() {
+            _sessionId = result['session_id'] as int?;
+            _questions = questionsData
+                .map((q) => DiagnosticQuestion.fromJson(q))
+                .toList();
+            _currentQuestionIndex = 0;
+            _selectedOptionId = null;
+            _answers.clear();
+            _loading = false;
+          });
+          break;
 
-    try {
-      // Remove is_correct from answers - backend will determine this
-      final answersToSubmit = _answers
-          .map((a) => {
-                'question_id': a.questionId,
-                'selected_option_id': a.selectedOptionId,
-                'answered_at': a.answeredAt.toIso8601String(),
-              })
-          .toList();
-
-      final result = await DiagnosticService.submitDiagnostic(
-        _sessionId!,
-        answersToSubmit,
-      );
-
-      if (!mounted) return;
-
-      if (result == null) {
-        setState(() {
-          _error = 'Failed to submit diagnostic. Please try again.';
-          _submitting = false;
-        });
-        return;
-      }
-
-      // Update lives data after submission
-      _updateLivesData(result);
-
-      // ✅ Check if diagnostic is completed
-      if (result['diagnostic_completed'] == true) {
-        if (mounted) {
-          setState(() => _submitting = false);
+        case DiagnosticResponseType.results:
+          if (!mounted) return;
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (_) => DiagnosticResultScreen(result: result),
             ),
           );
-        }
-        return;
-      }
+          break;
 
-      // ✅ Check if there are more questions (backend returns 'questions' key)
-      if (result['questions'] != null &&
-          (result['questions'] as List).isNotEmpty) {
-        _loadQuestions(result['questions'] as List);
-      } else {
-        // No more questions - shouldn't happen but handle gracefully
-        if (mounted) {
-          setState(() => _submitting = false);
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => DiagnosticResultScreen(result: result),
-            ),
-          );
-        }
+        case DiagnosticResponseType.error:
+        default:
+          setState(() {
+            _error = result['message'] ?? 'An error occurred';
+            _loading = false;
+          });
       }
     } catch (e) {
-      print('❌ Error submitting batch: $e');
       if (!mounted) return;
       setState(() {
-        _error = 'Failed to submit. Please try again.';
-        _submitting = false;
-      });
-    }
-  }
-
-  // ========== DATA METHODS ==========
-
-  void _updateLivesData(Map<String, dynamic> result) {
-    // Only parse lives data if it exists in response
-    // Premium/SIMBA users won't have lives data in response
-    if (result.containsKey('lives')) {
-      print('📊 Lives Update:');
-      print('  Lives: ${result['lives']}');
-      print('  Max Lives: ${result['max_lives']}');
-      print('  Can Answer: ${result['can_answer']}');
-      print('  Unlimited: ${result['unlimited']}');
-      print('  Next Life In: ${result['next_life_in_seconds']}s');
-
-      setState(() {
-        _lives = result['lives'] ?? 0;
-        _maxLives = result['max_lives'] ?? 5;
-        _unlimitedLives = result['unlimited'] ?? false;
-        _canAnswer = result['can_answer'] ?? true;
-        _nextLifeInSeconds = result['next_life_in_seconds'];
-        _nextLifeAt = result['next_life_at'];
-      });
-    } else {
-      // No lives data in response = unlimited (Premium/SIMBA)
-      print('📊 No lives data - Premium/SIMBA user');
-      setState(() {
-        _unlimitedLives = true;
-        _canAnswer = true;
-        _lives = 0;
-        _maxLives = 0;
-        _nextLifeInSeconds = null;
-        _nextLifeAt = null;
-      });
-    }
-  }
-
-  void _loadQuestions(List<dynamic> questionsData) {
-    if (!mounted) return;
-
-    try {
-      final parsedQuestions =
-          questionsData.map((q) => DiagnosticQuestion.fromJson(q)).toList();
-
-      setState(() {
-        _questions = parsedQuestions;
-        _currentQuestionIndex = 0;
-        _selectedOptionId = null;
-        _answers.clear();
+        _error = 'Error starting diagnostic: $e';
         _loading = false;
-        _submitting = false;
       });
-    } catch (e) {
-      print('❌ Error loading questions: $e');
-      if (mounted) {
-        setState(() {
-          _error = 'Failed to load questions: $e';
-          _loading = false;
-        });
+    }
+  }
+
+  void _showCooldownDialog(Map<String, dynamic> data) {
+    final daysRemaining = data['days_remaining'] ?? 0;
+    final nextAvailableDate = data['next_available_date'] as String?;
+    
+    String formattedDate = 'in $daysRemaining days';
+    if (nextAvailableDate != null) {
+      try {  // ✅ FIXED: Was "try o{" before
+        final date = DateTime.parse(nextAvailableDate);
+        formattedDate = '${date.month}/${date.day}/${date.year}';
+      } catch (e) {
+        // Use days remaining as fallback
       }
     }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.access_time, color: AppColors.darkRed, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Diagnostic Available Soon',
+                style: AppFontStyles.heading2.copyWith(
+                  color: AppColors.darkRed,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You can retake the diagnostic once per month to track your learning progress.',
+              style: AppFontStyles.bodyLarge,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.lightGreyBackground,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Next diagnostic:',
+                        style: AppFontStyles.bodyMedium.copyWith(
+                          color: AppColors.darkGreyText,
+                        ),
+                      ),
+                      Text(
+                        formattedDate,
+                        style: AppFontStyles.bodyLarge.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.darkRed,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Days remaining:',
+                        style: AppFontStyles.bodyMedium.copyWith(
+                          color: AppColors.darkGreyText,
+                        ),
+                      ),
+                      Text(
+                        '$daysRemaining days',
+                        style: AppFontStyles.bodyLarge.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.darkRed,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '💡 Why wait?',
+              style: AppFontStyles.bodyLarge.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your learning level has been determined! Keep practicing to improve, and we\'ll reassess your progress next month.',
+              style: AppFontStyles.bodyMedium.copyWith(
+                color: AppColors.darkGreyText,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context); // Close dialog
+                Navigator.pop(context); // Go back to previous screen
+              },
+              style: AppButtonStyles.primary,
+              child: Text('Back to Learning', style: AppFontStyles.buttonPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _selectOption(int optionId) {
@@ -236,68 +243,141 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
   }
 
   Future<void> _submitAnswer() async {
-    if (_selectedOptionId == null) return;
+    if (_selectedOptionId == null || _sessionId == null) return;
 
-    final currentQuestion = _questions[_currentQuestionIndex];
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
 
-    // Store answer (backend will determine correctness)
-    final answer = DiagnosticAnswer(
-      questionId: currentQuestion.id,
-      selectedOptionId: _selectedOptionId!,
-      isCorrect: false, // Placeholder - backend validates
-      answeredAt: DateTime.now(),
-    );
-    _answers.add(answer);
+    try {
+      final currentQuestion = _questions[_currentQuestionIndex];
+      
+      // Check if answer is correct
+      final isCorrect = currentQuestion.correctOptionId == _selectedOptionId;
+      
+      // Store answer
+      _answers.add(DiagnosticAnswer(
+        questionId: currentQuestion.id,
+        selectedOptionId: _selectedOptionId!,
+        isCorrect: isCorrect,
+        answeredAt: DateTime.now(),
+      ));
 
-    // Move to next question or submit batch
-    if (_currentQuestionIndex < _questions.length - 1) {
+      // Check if this was the last question in the batch
+      if (_currentQuestionIndex < _questions.length - 1) {
+        // Move to next question
+        setState(() {
+          _currentQuestionIndex++;
+          _selectedOptionId = null;
+          _submitting = false;
+        });
+      } else {
+        // Submit all answers
+        await _submitBatch();
+      }
+    } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _currentQuestionIndex++;
-        _selectedOptionId = null;
+        _error = 'Error submitting answer: $e';
+        _submitting = false;
       });
-    } else {
-      await _submitBatch();
     }
   }
 
-  // ========== BUILD METHODS ==========
+  Future<void> _submitBatch() async {
+    try {
+      final result = await DiagnosticService.submitDiagnostic(
+        _sessionId!,
+        _answers.map((a) => a.toJson()).toList(),
+      );
+
+      if (!mounted) return;
+
+      if (result == null) {
+        setState(() {
+          _error = 'Failed to submit answers';
+          _submitting = false;
+        });
+        return;
+      }
+
+      final responseType = DiagnosticService.getResponseType(result);
+
+      switch (responseType) {
+        case DiagnosticResponseType.questions:
+          // More questions - load next batch
+          final questionsData = result['questions'] as List?;
+          final nextQuestions = result['next_questions'] as List?;
+          final dataToLoad = questionsData ?? nextQuestions;
+
+          if (dataToLoad == null || dataToLoad.isEmpty) {
+            setState(() {
+              _error = 'No more questions available';
+              _submitting = false;
+            });
+            return;
+          }
+
+          setState(() {
+            _questions = dataToLoad
+                .map((q) => DiagnosticQuestion.fromJson(q))
+                .toList();
+            _currentQuestionIndex = 0;
+            _selectedOptionId = null;
+            _answers.clear();
+            _submitting = false;
+          });
+          break;
+
+        case DiagnosticResponseType.results:
+          // Diagnostic complete - show results
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DiagnosticResultScreen(result: result),
+            ),
+          );
+          break;
+
+        case DiagnosticResponseType.error:
+        default:
+          setState(() {
+            _error = result['message'] ?? 'An error occurred';
+            _submitting = false;
+          });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Error submitting batch: $e';
+        _submitting = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     // Loading state
     if (_loading) {
-      return CommonQuestionWidgets.buildLoadingState();
-    }
-
-    // ✅ Only show out of lives modal if:
-    // - No lives AND
-    // - Not unlimited AND
-    // - Not submitting AND
-    // - Questions are empty (so we're not mid-diagnostic)
-    if (!_canAnswer &&
-        !_unlimitedLives &&
-        !_hasShownModal &&
-        !_submitting &&
-        _questions.isEmpty) {
-      Future.microtask(() {
-        if (mounted) {
-          _hasShownModal = true;
-          OutOfLivesModal.show(
-            context,
-            nextLifeInSeconds: _nextLifeInSeconds ?? 0,
-            onGoBack: () {
-              Navigator.pop(context); // Close modal
-              Navigator.pop(context); // Go back from diagnostic screen
-            },
-            customMessage: 'You need lives to continue the diagnostic test.',
-          );
-        }
-      });
-
-      // Return empty scaffold while modal shows
       return Scaffold(
         backgroundColor: AppColors.lightGreyBackground,
-        body: Container(),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: AppColors.darkRed),
+              const SizedBox(height: 16),
+              Text(
+                'Preparing your diagnostic...',
+                style: AppFontStyles.bodyLarge.copyWith(
+                  color: AppColors.darkGreyText,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -322,21 +402,6 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ Lives header - will hide itself if unlimited
-            LivesHeader(
-              lives: _lives,
-              maxLives: _maxLives,
-              unlimited: _unlimitedLives,
-              nextLifeInSeconds: _nextLifeInSeconds,
-              onTimerUpdate: (remainingSeconds) {
-                if (mounted) {
-                  setState(() {
-                    _nextLifeInSeconds = remainingSeconds;
-                  });
-                }
-              },
-            ),
-
             // Progress header
             CommonQuestionWidgets.buildProgressHeader(
               progress: progress,
@@ -370,10 +435,10 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
           const SizedBox(height: 24),
 
           // Question image
-         if (question.imageUrl != null && question.imageUrl!.isNotEmpty) ...[
+          if (question.imageUrl != null && question.imageUrl!.isNotEmpty) ...[
             Container(
               width: double.infinity,
-              constraints: BoxConstraints(maxHeight: 400),
+              constraints: const BoxConstraints(maxHeight: 400),
               child: Image.network(
                 question.imageUrl!,
                 fit: BoxFit.contain,
@@ -392,80 +457,81 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
                 onTap: _submitting ? null : () => _selectOption(option.id),
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
   }
 
-Widget _buildOptionCard({
-  required DiagnosticOption option,
-  required bool isSelected,
-  required VoidCallback? onTap,
-}) {
-  return InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(12),
-    child: Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isSelected ? AppColors.darkRed.withOpacity(0.1) : Colors.white,
-        border: Border.all(
-          color: isSelected ? AppColors.darkRed : Colors.grey[300]!,
-          width: isSelected ? 2 : 1,
+  Widget _buildOptionCard({
+    required DiagnosticOption option,
+    required bool isSelected,
+    required VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.darkRed.withOpacity(0.1) : Colors.white,
+          border: Border.all(
+            color: isSelected ? AppColors.darkRed : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
         ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          // Radio button
-          Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isSelected ? AppColors.darkRed : Colors.grey[400]!,
-                width: 2,
-              ),
-              color: isSelected ? AppColors.darkRed : Colors.transparent,
-            ),
-            child: isSelected
-                ? Center(
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                      ),
-                    ),
-                  )
-                : null,
-          ),
-          const SizedBox(width: 12),
-          
-          // Option text with LaTeX support
-          Expanded(
-            child: HtmlLatexRenderer.renderInlineHtml(option.text),
-          ),
-          
-          // Option image if exists
-          if (option.imageUrl != null && option.imageUrl!.isNotEmpty) ...[
-            const SizedBox(width: 12),
+        child: Row(
+          children: [
+            // Radio button
             Container(
-              constraints: BoxConstraints(maxHeight: 60, maxWidth: 100),
-              child: Image.network(
-                option.imageUrl!,
-                fit: BoxFit.contain,
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? AppColors.darkRed : Colors.grey[400]!,
+                  width: 2,
+                ),
+                color: isSelected ? AppColors.darkRed : Colors.transparent,
               ),
+              child: isSelected
+                  ? Center(
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                        ),
+                      ),
+                    )
+                  : null,
             ),
+            const SizedBox(width: 12),
+            
+            // Option text with LaTeX support
+            Expanded(
+              child: HtmlLatexRenderer.renderInlineHtml(option.text),
+            ),
+            
+            // Option image if exists
+            if (option.imageUrl != null && option.imageUrl!.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 60, maxWidth: 100),
+                child: Image.network(
+                  option.imageUrl!,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
+
   Widget _buildSubmitButton() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -486,7 +552,7 @@ Widget _buildOptionCard({
           onPressed:
               _selectedOptionId == null || _submitting ? null : _submitAnswer,
           style: AppButtonStyles.primary.copyWith(
-            shape: MaterialStateProperty.all(
+            shape: WidgetStateProperty.all(
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
           ),

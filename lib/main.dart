@@ -43,11 +43,11 @@ class _MyAppState extends State<MyApp> {
           case '/':
             return MaterialPageRoute(builder: (_) => const StartupSplashScreen());
           case '/home':
-            return MaterialPageRoute(builder: (_) => const HomeScreen());
+            return MaterialPageRoute(builder: (_) => HomeScreen());  // ✅ REMOVED const
           case '/subject-select':
             return MaterialPageRoute(builder: (_) => SubjectSelectScreen());
           case '/diagnostic':
-            return MaterialPageRoute(builder: (_) => const DiagnosticScreen());
+            return MaterialPageRoute(builder: (_) => DiagnosticScreen());  // ✅ REMOVED const
           case '/question':
             final args = settings.arguments as Map<String, dynamic>?;
             if (args != null) {

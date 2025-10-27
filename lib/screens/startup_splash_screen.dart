@@ -5,7 +5,7 @@ import 'auth/otp_request_screen.dart';
 import 'bottom_nav_screen.dart';
 
 class StartupSplashScreen extends StatefulWidget {
-  const StartupSplashScreen({Key? key}) : super(key: key);
+  const StartupSplashScreen({super.key});
 
   @override
   State<StartupSplashScreen> createState() => _StartupSplashScreenState();

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class RegistrationScreen extends StatefulWidget {
+  const RegistrationScreen({super.key});
+
   @override
   _RegistrationScreenState createState() => _RegistrationScreenState();
 }
@@ -68,12 +70,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 final String name = firstNameController.text;
                 print('✅ Registered $name');
               },
-              child: Text('Register'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Color(0xFF960000),
                 foregroundColor: Colors.white,
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
+              child: Text('Register'),
             ),
           ],
         ),

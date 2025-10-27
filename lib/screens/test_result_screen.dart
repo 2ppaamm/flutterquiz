@@ -18,7 +18,7 @@ class TestResultScreen extends StatefulWidget {
   final String encouragement;
 
   const TestResultScreen({
-    Key? key,
+    super.key,
     required this.kudos,
     required this.maxile,
     required this.maxileLevelName, // ✅ Required from backend
@@ -28,7 +28,7 @@ class TestResultScreen extends StatefulWidget {
     required this.isSubscriber,
     required this.durationInSeconds,
     required this.encouragement,
-  }) : super(key: key);
+  });
 
   @override
   State<TestResultScreen> createState() => _TestResultScreenState();

@@ -12,10 +12,10 @@ class PreUserInfoScreen extends StatefulWidget {
   final int? userId;
 
   const PreUserInfoScreen({
-    Key? key,
+    super.key,
     required this.contact,
     this.userId,
-  }) : super(key: key);
+  });
 
   @override
   State<PreUserInfoScreen> createState() => _PreUserInfoScreenState();
