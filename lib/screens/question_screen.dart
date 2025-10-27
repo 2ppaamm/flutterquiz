@@ -1535,142 +1535,174 @@ class _QuestionScreenState extends State<QuestionScreen>
     super.dispose();
   }
 
- void _submitAnswer() {
-  final question = _getQuestionData(currentIndex);
-  final questionText = question['question'] ?? '';
-  final typeId = question['type_id'];
-  final questionId = question['id'];
+  void _submitAnswer() {
+    final question = _getQuestionData(currentIndex);
+    final questionText = question['question'] ?? '';
+    final typeId = question['type_id'];
+    final questionId = question['id'];
 
-  bool correct = false;
-  dynamic userAnswer;
+    bool correct = false;
+    dynamic userAnswer;
 
-  // ✅ FIXED: Use type_id to determine question type
-  if (typeId == 2) {
-    // Type 2: Fill-in-blank
-    final hasBlanks = QuestionBlankUtils.hasBlanks(questionText);
+    // ✅ FIXED: Use type_id to determine question type
+    if (typeId == 2) {
+      // Type 2: Fill-in-blank
+      final hasBlanks = QuestionBlankUtils.hasBlanks(questionText);
 
-    if (hasBlanks) {
-      // NEW [0] style blanks
-      final userAnswers = <int, String>{};
-      _blankControllers.forEach((key, controller) {
-        userAnswers[key] = controller.text.trim();
-      });
+      if (hasBlanks) {
+        // NEW [0] style blanks
+        final userAnswers = <int, String>{};
+        _blankControllers.forEach((key, controller) {
+          userAnswers[key] = controller.text.trim();
+        });
 
-      correct = QuestionBlankUtils.validateAnswers(
-        userAnswers,
-        {
-          'answer0': question['answer0']?.toString(),
-          'answer1': question['answer1']?.toString(),
-          'answer2': question['answer2']?.toString(),
-          'answer3': question['answer3']?.toString(),
-        },
-      );
+        correct = QuestionBlankUtils.validateAnswers(
+          userAnswers,
+          {
+            'answer0': question['answer0']?.toString(),
+            'answer1': question['answer1']?.toString(),
+            'answer2': question['answer2']?.toString(),
+            'answer3': question['answer3']?.toString(),
+          },
+        );
 
-      final answerList = <String?>[null, null, null, null];
-      for (int i = 0; i < 4; i++) {
-        answerList[i] = userAnswers[i];
-      }
-      userAnswer = answerList;
-    } else {
-      // OLD <input> style
-      final indexedAnswers = <int, String?>{};
-      for (final entry in fillInAnswers.entries) {
-        final keyParts = entry.key.split('_');
-        if (keyParts.length >= 2) {
-          final index = int.tryParse(keyParts.last);
-          if (index != null) {
-            indexedAnswers[index] = entry.value.trim();
+        final answerList = <String?>[null, null, null, null];
+        for (int i = 0; i < 4; i++) {
+          answerList[i] = userAnswers[i];
+        }
+        userAnswer = answerList;
+      } else {
+        // OLD <input> style
+        final indexedAnswers = <int, String?>{};
+        for (final entry in fillInAnswers.entries) {
+          final keyParts = entry.key.split('_');
+          if (keyParts.length >= 2) {
+            final index = int.tryParse(keyParts.last);
+            if (index != null) {
+              indexedAnswers[index] = entry.value.trim();
+            }
+          }
+        }
+
+        final answerList = <String?>[null, null, null, null];
+        for (int i = 0; i < 4; i++) {
+          answerList[i] = indexedAnswers[i];
+        }
+        userAnswer = answerList;
+
+        correct = false;
+        for (int i = 0; i < 4; i++) {
+          final correctAns = question['answer$i']?.toString().trim();
+          final userAns = answerList[i]?.trim();
+          if (correctAns != null &&
+              correctAns.isNotEmpty &&
+              userAns == correctAns) {
+            correct = true;
+            break;
           }
         }
       }
+    } else {
+      // Type 1: Multiple choice
+      correct = _isCorrectAnswer(selectedAnswer ?? '');
+      final options =
+          List.generate(4, (i) => question['answer$i']?.toString() ?? '');
+      final selectedIndex = options.indexOf(selectedAnswer ?? '');
+      userAnswer = selectedIndex >= 0 ? selectedIndex.toString() : '0';
+    }
 
-      final answerList = <String?>[null, null, null, null];
-      for (int i = 0; i < 4; i++) {
-        answerList[i] = indexedAnswers[i];
-      }
-      userAnswer = answerList;
+    setState(() {
+      hasAnswered = true;
+      isCorrect = correct;
+    });
 
-      correct = false;
-      for (int i = 0; i < 4; i++) {
-        final correctAns = question['answer$i']?.toString().trim();
-        final userAns = answerList[i]?.trim();
-        if (correctAns != null &&
-            correctAns.isNotEmpty &&
-            userAns == correctAns) {
-          correct = true;
-          break;
-        }
+    _feedbackAnimationController.forward().then((_) {
+      _feedbackAnimationController.reverse();
+    });
+
+    if (!correct) {
+      _reduceLives();
+    }
+
+    submittedQuestionIds.add(questionId);
+    submittedAnswers.add(userAnswer);
+  }
+
+  String _getUserAnswerDisplay() {
+    final question = _getQuestionData(currentIndex);
+    final typeId = question['type_id'];
+
+    if (typeId == 1 || typeId == 3) {
+      // Multiple choice or True/False
+      return selectedAnswer ?? 'No answer provided';
+    } else if (typeId == 2) {
+      // Fill-in-the-blank
+      if (_blankControllers.isNotEmpty) {
+        final answers = _blankControllers.values
+            .map((c) => c.text)
+            .where((text) => text.isNotEmpty)
+            .toList();
+        return answers.isNotEmpty ? answers.join(', ') : 'No answer provided';
+      } else if (fillInAnswers.isNotEmpty) {
+        final answers =
+            fillInAnswers.values.where((v) => v.isNotEmpty).toList();
+        return answers.isNotEmpty ? answers.join(', ') : 'No answer provided';
       }
     }
-  } else {
-    // Type 1: Multiple choice
-    correct = _isCorrectAnswer(selectedAnswer ?? '');
-    final options =
-        List.generate(4, (i) => question['answer$i']?.toString() ?? '');
-    final selectedIndex = options.indexOf(selectedAnswer ?? '');
-    userAnswer = selectedIndex >= 0 ? selectedIndex.toString() : '0';
+    return 'No answer provided';
   }
 
-  setState(() {
-    hasAnswered = true;
-    isCorrect = correct;
-  });
-
-  _feedbackAnimationController.forward().then((_) {
-    _feedbackAnimationController.reverse();
-  });
-
-  if (!correct) {
-    _reduceLives();
-  }
-
-  submittedQuestionIds.add(questionId);
-  submittedAnswers.add(userAnswer);
-}
-
-String _getUserAnswerDisplay() {
-  final question = _getQuestionData(currentIndex);
-  final typeId = question['type_id'];
-  
-  if (typeId == 1 || typeId == 3) {
-    // Multiple choice or True/False
-    return selectedAnswer ?? 'No answer provided';
-  } else if (typeId == 2) {
-    // Fill-in-the-blank
-    if (_blankControllers.isNotEmpty) {
-      final answers = _blankControllers.values
-          .map((c) => c.text)
-          .where((text) => text.isNotEmpty)
-          .toList();
-      return answers.isNotEmpty ? answers.join(', ') : 'No answer provided';
-    } else if (fillInAnswers.isNotEmpty) {
-      final answers = fillInAnswers.values
-          .where((v) => v.isNotEmpty)
-          .toList();
-      return answers.isNotEmpty ? answers.join(', ') : 'No answer provided';
+  Widget _buildFeedbackArea() {
+    if (!hasAnswered) {
+      return const SizedBox.shrink();
     }
+
+    final question = _getQuestionData(currentIndex);
+    final correctAnswer = question['correct_answer']?.toString();
+    final explanation = question['explanation']?.toString();
+    final userAnswer = _getUserAnswerDisplay();
+    final questionType = question['type'] as int? ?? 1; // Get question type
+
+    // For Type 1: Get the text of the correct option
+    String? correctOptionText;
+    if (questionType == 1) {
+      final answerOptions = question['answer_options'] as List?;
+      if (answerOptions != null) {
+        final correctOption = answerOptions.firstWhere(
+          (opt) => opt['is_correct'] == 1,
+          orElse: () => null,
+        );
+        correctOptionText = correctOption?['option_text']?.toString();
+      }
+    }
+
+    // For Type 2: Get all acceptable answers
+    List<String>? acceptableAnswers;
+    if (questionType == 2) {
+      acceptableAnswers = [
+        if (question['answer0']?.toString().isNotEmpty ?? false)
+          question['answer0'].toString(),
+        if (question['answer1']?.toString().isNotEmpty ?? false)
+          question['answer1'].toString(),
+        if (question['answer2']?.toString().isNotEmpty ?? false)
+          question['answer2'].toString(),
+        if (question['answer3']?.toString().isNotEmpty ?? false)
+          question['answer3'].toString(),
+      ];
+    }
+
+    return QuestionFeedbackWidget(
+      isCorrect: isCorrect,
+      userAnswer: userAnswer,
+      correctAnswer: correctAnswer,
+      explanation: explanation,
+      onReportIssue: _showReportDialog,
+      questionType: questionType,
+      correctOptionText: correctOptionText,
+      acceptableAnswers: acceptableAnswers,
+    );
   }
-  return 'No answer provided';
-}
 
-Widget _buildFeedbackArea() {
-  if (!hasAnswered) {
-    return const SizedBox.shrink();
-  }
-
-  final question = _getQuestionData(currentIndex);
-  final correctAnswer = question['correct_answer']?.toString();
-  final explanation = question['explanation']?.toString();
-  final userAnswer = _getUserAnswerDisplay();
-
-  return QuestionFeedbackWidget(
-    isCorrect: isCorrect,
-    userAnswer: userAnswer,
-    correctAnswer: correctAnswer,
-    explanation: explanation,
-    onReportIssue: _showReportDialog,
-  );
-}
   @override
   Widget build(BuildContext context) {
     return Scaffold(

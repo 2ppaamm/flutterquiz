@@ -10,6 +10,9 @@ class QuestionFeedbackWidget extends StatelessWidget {
   final String? correctAnswer;
   final String? explanation;
   final VoidCallback onReportIssue;
+  final int questionType; // 1 = multiple choice, 2 = fill in blank
+  final List<String>? acceptableAnswers; // For type 2 questions (answer0, answer1, answer2, answer3)
+  final String? correctOptionText; // For type 1 questions (the actual text of correct option)
 
   const QuestionFeedbackWidget({
     super.key,
@@ -18,6 +21,9 @@ class QuestionFeedbackWidget extends StatelessWidget {
     this.correctAnswer,
     this.explanation,
     required this.onReportIssue,
+    required this.questionType,
+    this.acceptableAnswers,
+    this.correctOptionText,
   });
 
   @override
@@ -59,6 +65,20 @@ class QuestionFeedbackWidget extends StatelessWidget {
     );
   }
 
+  /// Get the formatted correct answer based on question type
+  String _getFormattedCorrectAnswer() {
+    if (questionType == 1) {
+      // Type 1: Show the actual text content of the correct option
+      return correctOptionText ?? correctAnswer ?? '';
+    } else if (questionType == 2) {
+      // Type 2: Show all acceptable answers separated by commas
+      if (acceptableAnswers != null && acceptableAnswers!.isNotEmpty) {
+        return acceptableAnswers!.where((a) => a.isNotEmpty).join(', ');
+      }
+    }
+    return correctAnswer ?? '';
+  }
+
   /// Header row with status icon, message, and flag button
   Widget _buildHeader() {
     return Row(
@@ -96,6 +116,8 @@ class QuestionFeedbackWidget extends StatelessWidget {
 
   /// Shows user's answer vs correct answer comparison
   Widget _buildAnswerComparison() {
+    final formattedCorrectAnswer = _getFormattedCorrectAnswer();
+    
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -142,7 +164,7 @@ class QuestionFeedbackWidget extends StatelessWidget {
             const SizedBox(height: 12),
           ],
           // Correct answer
-          if (correctAnswer != null) ...[
+          if (formattedCorrectAnswer.isNotEmpty) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -153,14 +175,14 @@ class QuestionFeedbackWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Correct answer:',
+                        questionType == 2 ? 'Acceptable answers:' : 'Correct answer:',
                         style: AppFontStyles.caption.copyWith(
                           color: AppColors.darkGreyText,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        correctAnswer!,
+                        formattedCorrectAnswer,
                         style: AppFontStyles.bodyMedium.copyWith(
                           color: AppColors.success,
                           fontWeight: FontWeight.bold,
@@ -182,7 +204,7 @@ class QuestionFeedbackWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.levelBeginner.withOpacity(0.1), // Using blue from your colors
+        color: AppColors.levelBeginner.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: AppColors.levelBeginner.withOpacity(0.3),
