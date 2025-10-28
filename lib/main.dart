@@ -5,6 +5,7 @@ import 'screens/subject_select_screen.dart';
 import 'screens/diagnostic/diagnostic_screen.dart';
 import 'screens/question_screen.dart';
 import 'theme/app_theme.dart';
+import 'screens/diagnostic/diagnostic_result_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,22 +43,45 @@ class _MyAppState extends State<MyApp> {
         switch (settings.name) {
           case '/':
             return MaterialPageRoute(builder: (_) => const StartupSplashScreen());
+          
           case '/home':
-            return MaterialPageRoute(builder: (_) => HomeScreen());  // ✅ REMOVED const
+            return MaterialPageRoute(builder: (_) => HomeScreen());
+          
           case '/subject-select':
             return MaterialPageRoute(builder: (_) => SubjectSelectScreen());
+          
+          // ✅ WRAP DIAGNOSTIC - Back button goes to home
           case '/diagnostic':
-            return MaterialPageRoute(builder: (_) => DiagnosticScreen());  // ✅ REMOVED const
+            return MaterialPageRoute(
+              builder: (_) => const BackToHomeWrapper(
+                child: DiagnosticScreen(),
+              ),
+            );
+          
+          // ✅ WRAP DIAGNOSTIC RESULT - Back button goes to home
+          case '/diagnostic-result':
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (_) => BackToHomeWrapper(
+                child: DiagnosticResultScreen(
+                  result: args?['result'] ?? {},
+                ),
+              ),
+            );
+          
           case '/question':
             final args = settings.arguments as Map<String, dynamic>?;
             if (args != null) {
+              // ✅ WRAP QUESTION SCREEN - Back button goes to home
               return MaterialPageRoute(
-                builder: (_) => QuestionScreen(
-                  trackId: args['trackId'] as int?,
-                  testId: args['testId'] as int?,
-                  trackName: args['trackName'] as String?,
-                  questions: args['questions'] as List<dynamic>,
-                  sessionType: args['sessionType'] as String? ?? 'track',
+                builder: (_) => BackToHomeWrapper(
+                  child: QuestionScreen(
+                    trackId: args['trackId'] as int?,
+                    testId: args['testId'] as int?,
+                    trackName: args['trackName'] as String?,
+                    questions: args['questions'] as List<dynamic>,
+                    sessionType: args['sessionType'] as String? ?? 'track',
+                  ),
                 ),
               );
             }
@@ -69,6 +93,36 @@ class _MyAppState extends State<MyApp> {
           builder: (_) => const StartupSplashScreen(),
         );
       },
+    );
+  }
+}
+
+// ========================================
+// ✅ ADD THIS WIDGET - Back Button Handler
+// ========================================
+
+class BackToHomeWrapper extends StatelessWidget {
+  final Widget child;
+
+  const BackToHomeWrapper({
+    Key? key,
+    required this.child,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false, // Prevent default back behavior
+      onPopInvoked: (bool didPop) {
+        if (!didPop) {
+          // Navigate to home instead of popping
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/home',
+            (route) => false, // Clear all previous routes
+          );
+        }
+      },
+      child: child,
     );
   }
 }

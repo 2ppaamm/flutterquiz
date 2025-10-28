@@ -13,6 +13,7 @@ import 'upgrade_screen.dart';
 import '../widgets/diagnostic_unavailable_dialog.dart'; 
 import 'diagnostic/diagnostic_result_screen.dart';
 
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -125,52 +126,68 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showDiagnosticRestrictionDialog() {
     // Calculate next available date from days remaining
     final nextDate = DateTime.now().add(Duration(days: _daysRemaining));
-
-    showDiagnosticUnavailableDialog(
+    
+    // Call dialog directly without helper function to avoid caching issues
+    showDialog(
       context: context,
-      nextAvailableDate: nextDate,
-      
-      // Button 1: View Last Results
-      onViewLastResults: () async {
-        // Show loading
-        showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => Center(
-                child: CircularProgressIndicator(color: AppColors.darkRed)));
+      builder: (context) => DiagnosticUnavailableDialog(
+        nextAvailableDate: nextDate,
+        onViewLastResults: _viewLastDiagnosticResults,
+        onPracticeNow: _startPracticeMode,
+        onExploreTopics: _showTopicsScreen,
+      ),
+    );
+  }
 
-        // Call your existing service
-        final result = await DiagnosticService.getLastDiagnostic();
-        Navigator.pop(context);
-
-        if (result != null) {
+  // ✅ NEW: View last diagnostic results
+  void _viewLastDiagnosticResults() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastResultJson = prefs.getString('last_diagnostic_result');
+    
+    if (lastResultJson != null) {
+      try {
+        final lastResult = json.decode(lastResultJson);
+        
+        if (lastResult != null && lastResult is Map<String, dynamic>) {
           Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DiagnosticResultScreen(result: result),
-              ));
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('No previous diagnostic results found')),
+            context,
+            MaterialPageRoute(
+              builder: (context) => DiagnosticResultScreen(result: lastResult),
+            ),
           );
+        } else {
+          _showErrorSnackBar('No previous diagnostic results found');
         }
-      },
-      
-      // Button 2: Explore Topics (Browse Topics)
-      onExploreTopics: () {
-        // Navigate to browse/explore topics screen
-        Navigator.pushNamed(context, '/subject-select');
-      },
-      
-      // Button 3: Upgrade to Premium
-      onUpgradeToPremium: () {
-        // Navigate to upgrade screen
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const UpgradeScreen()),
-        );
-      },
+      } catch (e) {
+        _showErrorSnackBar('Failed to load diagnostic results');
+      }
+    } else {
+      _showErrorSnackBar('No previous diagnostic results available');
+    }
+  }
+
+  // ✅ NEW: Start practice mode
+  void _startPracticeMode() {
+    Navigator.pushNamed(context, '/subject-select').then((_) {
+      loadFromStorage(); // Refresh data after returning
+    });
+  }
+
+  // ✅ NEW: Show topics screen
+  void _showTopicsScreen() {
+    Navigator.pushNamed(context, '/subject-select').then((_) {
+      loadFromStorage(); // Refresh data after returning
+    });
+  }
+
+  // ✅ NEW: Helper to show error messages
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 
