@@ -27,6 +27,31 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
   int _animatedMaxile = 0;
   double _animatedGaugeProgress = 0.0;
   bool _showDetailedResults = false;
+  String _getFormattedDate() {
+    final completedAt = widget.result['completed_at'] as String?;
+    if (completedAt == null) return 'Recently';
+
+    try {
+      final date = DateTime.parse(completedAt);
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec'
+      ];
+      return 'Completed on ${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (e) {
+      return 'Recently';
+    }
+  }
 
   @override
   void initState() {
@@ -93,7 +118,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) _confettiController.forward();
     });
-    
+
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) {
         _gaugeController.forward();
@@ -181,10 +206,11 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                             repeat: false,
                           ),
                         ),
-                        
+
                         const SizedBox(height: 8),
-                        
+
                         // Title
+// Title
                         Text(
                           'Assessment Complete!',
                           style: TextStyle(
@@ -194,9 +220,44 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                             letterSpacing: 0.5,
                           ),
                         ),
-                        
+
+// ADD THIS DATE SECTION
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.calendar_today,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _getFormattedDate(),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
                         const SizedBox(height: 32),
-                        
+                        const SizedBox(height: 32),
+
                         // Big Circular Gauge - FIXED
                         SizedBox(
                           width: 200,
@@ -210,7 +271,8 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                                 painter: CircularGaugePainter(
                                   progress: _animatedGaugeProgress,
                                   color: Colors.white,
-                                  backgroundColor: Colors.white.withOpacity(0.2),
+                                  backgroundColor:
+                                      Colors.white.withOpacity(0.2),
                                   strokeWidth: 18,
                                 ),
                               ),
@@ -239,7 +301,8 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                                   ),
                                   const SizedBox(height: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: Colors.white.withOpacity(0.2),
                                       borderRadius: BorderRadius.circular(12),
@@ -259,9 +322,9 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                             ],
                           ),
                         ),
-                        
+
                         const SizedBox(height: 32),
-                        
+
                         // Quick Stats Row
                         Row(
                           children: [
@@ -282,9 +345,9 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 24),
-                        
+
                         // Swipe indicator
                         AnimatedOpacity(
                           opacity: _showDetailedResults ? 0.0 : 1.0,
@@ -311,7 +374,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                     ),
                   ),
                 ),
-                
+
                 // Section Header
                 SliverToBoxAdapter(
                   child: Padding(
@@ -336,7 +399,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                     ),
                   ),
                 ),
-                
+
                 // Field Results
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
@@ -352,7 +415,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                 ),
               ],
             ),
-            
+
             // Sticky Bottom Button
             Positioned(
               left: 0,
@@ -444,10 +507,11 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
     final fieldName = field['field_name'] ?? 'Unknown';
     final maxile = field['maxile_level'] ?? 0;
     final levelDesc = field['level_description'] ?? '';
-    final levelName = field['level_name'] ?? 'Learning';  // Get level name from API
+    final levelName =
+        field['level_name'] ?? 'Learning'; // Get level name from API
     final ageComp = field['age_comparison'] as Map<String, dynamic>?;
     final nextMilestone = field['next_milestone'] as Map<String, dynamic>?;
-    
+
     final color = _getLevelColor(maxile);
     final progress = (maxile / 700).clamp(0.0, 1.0);
 
@@ -526,7 +590,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                         ),
                       ),
                       const SizedBox(width: 16),
-                      
+
                       // Info
                       Expanded(
                         child: Column(
@@ -559,13 +623,13 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                       ),
                     ],
                   ),
-                  
+
                   // Age Comparison
                   if (ageComp != null) ...[
                     const SizedBox(height: 14),
                     _buildAgeComparisonChip(ageComp),
                   ],
-                  
+
                   // Next Milestone
                   if (nextMilestone != null) ...[
                     const SizedBox(height: 14),
@@ -635,10 +699,11 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
     );
   }
 
-  Widget _buildNextMilestone(Map<String, dynamic> milestone, Color cardColor, double animValue) {
+  Widget _buildNextMilestone(
+      Map<String, dynamic> milestone, Color cardColor, double animValue) {
     final name = milestone['name'] ?? 'Next Level';
     final pointsAway = milestone['points_away'] ?? 0;
-    
+
     if (pointsAway <= 0) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -670,7 +735,7 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
         ),
       );
     }
-    
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -720,10 +785,12 @@ class _DiagnosticResultScreenState extends State<DiagnosticResultScreen>
                 TweenAnimationBuilder<int>(
                   duration: Duration(milliseconds: 1000),
                   curve: Curves.easeOutCubic,
-                  tween: IntTween(begin: 0, end: (pointsAway * animValue).round()),
+                  tween:
+                      IntTween(begin: 0, end: (pointsAway * animValue).round()),
                   builder: (context, value, child) {
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: cardColor.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),

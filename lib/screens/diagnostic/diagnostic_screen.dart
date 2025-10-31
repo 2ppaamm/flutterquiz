@@ -29,6 +29,10 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
   bool _submitting = false;
   String? _error;
 
+  // Cooldown state
+  bool _isCooldown = false;
+  Map<String, dynamic>? _cooldownData;
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +45,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _isCooldown = false;
+      _cooldownData = null;
     });
 
     try {
@@ -60,9 +66,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
 
       switch (responseType) {
         case DiagnosticResponseType.cooldown:
-          // ✅ Handle 30-day cooldown
-          _showCooldownDialog(result);
-          setState(() => _loading = false);
+          // Show cooldown screen
+          setState(() {
+            _isCooldown = true;
+            _cooldownData = result;
+            _loading = false;
+          });
           break;
 
         case DiagnosticResponseType.questions:
@@ -113,129 +122,6 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
     }
   }
 
-  void _showCooldownDialog(Map<String, dynamic> data) {
-    final daysRemaining = data['days_remaining'] ?? 0;
-    final nextAvailableDate = data['next_available_date'] as String?;
-    
-    String formattedDate = 'in $daysRemaining days';
-    if (nextAvailableDate != null) {
-      try {  // ✅ FIXED: Was "try o{" before
-        final date = DateTime.parse(nextAvailableDate);
-        formattedDate = '${date.month}/${date.day}/${date.year}';
-      } catch (e) {
-        // Use days remaining as fallback
-      }
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.access_time, color: AppColors.darkRed, size: 28),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Diagnostic Available Soon',
-                style: AppFontStyles.heading2.copyWith(
-                  color: AppColors.darkRed,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'You can retake the diagnostic once per month to track your learning progress.',
-              style: AppFontStyles.bodyLarge,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.lightGreyBackground,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Next diagnostic:',
-                        style: AppFontStyles.bodyMedium.copyWith(
-                          color: AppColors.darkGreyText,
-                        ),
-                      ),
-                      Text(
-                        formattedDate,
-                        style: AppFontStyles.bodyLarge.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.darkRed,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Days remaining:',
-                        style: AppFontStyles.bodyMedium.copyWith(
-                          color: AppColors.darkGreyText,
-                        ),
-                      ),
-                      Text(
-                        '$daysRemaining days',
-                        style: AppFontStyles.bodyLarge.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.darkRed,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '💡 Why wait?',
-              style: AppFontStyles.bodyLarge.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Your learning level has been determined! Keep practicing to improve, and we\'ll reassess your progress next month.',
-              style: AppFontStyles.bodyMedium.copyWith(
-                color: AppColors.darkGreyText,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context); // Close dialog
-                Navigator.pop(context); // Go back to previous screen
-              },
-              style: AppButtonStyles.primary,
-              child: Text('Back to Learning', style: AppFontStyles.buttonPrimary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _selectOption(int optionId) {
     setState(() {
       _selectedOptionId = optionId;
@@ -252,10 +138,10 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
 
     try {
       final currentQuestion = _questions[_currentQuestionIndex];
-      
+
       // Check if answer is correct
       final isCorrect = currentQuestion.correctOptionId == _selectedOptionId;
-      
+
       // Store answer
       _answers.add(DiagnosticAnswer(
         questionId: currentQuestion.id,
@@ -320,9 +206,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
           }
 
           setState(() {
-            _questions = dataToLoad
-                .map((q) => DiagnosticQuestion.fromJson(q))
-                .toList();
+            _questions =
+                dataToLoad.map((q) => DiagnosticQuestion.fromJson(q)).toList();
             _currentQuestionIndex = 0;
             _selectedOptionId = null;
             _answers.clear();
@@ -381,6 +266,11 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
       );
     }
 
+    // Cooldown state - show nice cooldown screen
+    if (_isCooldown && _cooldownData != null) {
+      return _buildCooldownScreen(_cooldownData!);
+    }
+
     // Error state
     if (_error != null) {
       return CommonQuestionWidgets.buildErrorState(
@@ -423,6 +313,237 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildCooldownScreen(Map<String, dynamic> data) {
+    final daysRemaining = data['days_remaining'] ?? 0;
+    final nextAvailableDate = data['next_available_date'] as String?;
+
+    String formattedDate = 'in $daysRemaining days';
+    if (nextAvailableDate != null) {
+      try {
+        final date = DateTime.parse(nextAvailableDate);
+        formattedDate = '${date.month}/${date.day}/${date.year}';
+      } catch (e) {
+        // Use days remaining as fallback
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.lightGreyBackground,
+      appBar: AppBar(
+        backgroundColor: AppColors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: AppColors.darkGreyText),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Diagnostic',
+          style: AppFontStyles.heading2,
+        ),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.access_time_rounded,
+                size: 80,
+                color: AppColors.darkRed,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Diagnostic Available Soon',
+                style: AppFontStyles.heading1.copyWith(
+                  color: AppColors.darkRed,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'You can retake the diagnostic once per month to track your learning progress.',
+                style: AppFontStyles.bodyLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Next diagnostic:',
+                          style: AppFontStyles.bodyLarge.copyWith(
+                            color: AppColors.darkGreyText,
+                          ),
+                        ),
+                        Text(
+                          formattedDate,
+                          style: AppFontStyles.heading3.copyWith(
+                            color: AppColors.darkRed,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Days remaining:',
+                          style: AppFontStyles.bodyLarge.copyWith(
+                            color: AppColors.darkGreyText,
+                          ),
+                        ),
+                        Text(
+                          '$daysRemaining days',
+                          style: AppFontStyles.heading3.copyWith(
+                            color: AppColors.darkRed,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.darkRed.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      '💡 Why wait?',
+                      style: AppFontStyles.heading3,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Your learning level has been determined! Keep practicing to improve, and we\'ll reassess your progress next month.',
+                      style: AppFontStyles.bodyMedium.copyWith(
+                        color: AppColors.darkGreyText,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+
+              // View Last Results Button
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: OutlinedButton.icon(
+                  onPressed: _viewLastDiagnostic,
+                  icon: Icon(Icons.history, color: AppColors.darkRed),
+                  label: Text(
+                    'View Last Results',
+                    style: AppFontStyles.bodyLarge.copyWith(
+                      color: AppColors.darkRed,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: AppColors.darkRed, width: 2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Back to Learning Button
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: AppButtonStyles.primary,
+                  child: Text(
+                    'Back to Learning',
+                    style: AppFontStyles.buttonPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+// Add this method to fetch and view last diagnostic
+  Future<void> _viewLastDiagnostic() async {
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      final result = await DiagnosticService.getLastDiagnostic();
+
+      if (!mounted) return;
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      if (result == null) {
+        // Show error
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load last diagnostic results'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Navigate to results screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DiagnosticResultScreen(result: result),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      // Show error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading results: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildQuestionCard(DiagnosticQuestion question) {
@@ -509,12 +630,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
                   : null,
             ),
             const SizedBox(width: 12),
-            
+
             // Option text with LaTeX support
             Expanded(
               child: HtmlLatexRenderer.renderInlineHtml(option.text),
             ),
-            
+
             // Option image if exists
             if (option.imageUrl != null && option.imageUrl!.isNotEmpty) ...[
               const SizedBox(width: 12),
