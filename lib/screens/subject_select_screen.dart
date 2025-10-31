@@ -88,15 +88,88 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
 
     return GestureDetector(
       onTap: () async {
-        // ... your existing onTap code stays the same ...
+        // FIXED: Convert trackId to String
+        final response =
+            await QuestionService.getQuestionsForTrack(trackId.toString());
+
+        if (response == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Failed to load questions. Please try again.')),
+          );
+          return;
+        }
+
+        // Check for out of lives response (code 205)
+        if (response['code'] == 205 ||
+            (response['lives'] != null &&
+                response['lives'] == 0 &&
+                response['can_answer'] == false)) {
+          OutOfLivesModal.show(
+            context,
+            nextLifeInSeconds: _calculateNextLifeTime(response),
+            onGoBack: () {
+              // Stay on subject select screen
+            },
+            customMessage: response['message'],
+          );
+          return;
+        }
+
+        // Check if we have questions
+        if (response['questions'] is List &&
+            (response['questions'] as List).isNotEmpty) {
+          final List<dynamic> questions = response['questions'];
+          final int testId = int.tryParse(response['test_id']?.toString() ??
+                  response['test']?.toString() ??
+                  '0') ??
+              0;
+
+          // ✅ SYNC: Update lives AND unlimited flag from API response to local storage
+          final prefs = await SharedPreferences.getInstance();
+
+          if (response['lives'] != null) {
+            await prefs.setInt('lives', response['lives'] as int);
+          }
+
+          if (response['max_lives'] != null) {
+            await prefs.setInt('max_lives', response['max_lives'] as int);
+          }
+
+          // ✅ CRITICAL: Save unlimited flag
+          if (response['unlimited'] != null) {
+            await prefs.setBool('unlimited', response['unlimited'] as bool);
+          }
+
+          // ✅ Also save can_answer if available
+          if (response['can_answer'] != null) {
+            await prefs.setBool('can_answer', response['can_answer'] as bool);
+          }
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => QuestionScreen(
+                trackId: trackId,
+                trackName: trackName,
+                testId: testId,
+                questions: questions,
+                sessionType: 'track',
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No questions found for this track.')),
+          );
+        }
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Icon/Image - REDUCED AspectRatio slightly
+          // Icon/Image
           AspectRatio(
-            aspectRatio:
-                1.05, // Changed from 1 to 1.05 to give more vertical space
+            aspectRatio: 1,
             child: Container(
               decoration: BoxDecoration(
                 color: AppColors.tileGrey,
@@ -149,20 +222,17 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
                     ),
             ),
           ),
-          // Track name label - ADDED Flexible and reduced spacing
-          SizedBox(height: 6), // Reduced from 8 to 6
-          Flexible(
-            // Added Flexible wrapper
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11, // Reduced from 12 to 11
-                color: AppColors.darkGreyText,
-                height: 1.2,
-              ),
+          // Track name label
+          SizedBox(height: 8),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.darkGreyText,
+              height: 1.2,
             ),
           ),
         ],
@@ -187,7 +257,7 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
                 crossAxisCount: 3,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 0.75,
+                childAspectRatio: 0.70, // Changed from 0.75 - gives more height
               ),
               itemBuilder: (context, index) => buildTile(entry.value[index]),
             ),
@@ -216,7 +286,7 @@ class _SubjectSelectScreenState extends State<SubjectSelectScreen>
                 crossAxisCount: 3,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 0.8,
+                childAspectRatio: 0.70, // Changed from 0.8 - gives more height
               ),
               itemBuilder: (context, index) => buildTile(entry.value[index]),
             ),
