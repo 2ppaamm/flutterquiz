@@ -16,8 +16,6 @@ import '../../services/auth_service.dart';
 import 'dart:ui_web' as ui;
 import 'package:web/web.dart' as web;
 
-
-
 class OTPRequestScreen extends StatefulWidget {
   final String? prefilledEmail;
   final bool showOTPField;
@@ -56,7 +54,7 @@ class _OTPRequestScreenState extends State<OTPRequestScreen> {
     // ignore: undefined_prefixed_name
     ui.platformViewRegistry.registerViewFactory(
       'externalImage',
-      (int viewId) => html.ImageElement()
+      (int viewId) => web.HTMLImageElement()
         ..src = '${AppConfig.apiBaseUrl}/images/houses/1548697074.png'
         ..style.width = '180px'
         ..style.height = '180px'
