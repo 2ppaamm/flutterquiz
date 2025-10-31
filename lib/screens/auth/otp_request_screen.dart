@@ -14,7 +14,9 @@ import '../../config.dart';
 import '../../services/auth_service.dart';
 
 import 'dart:ui_web' as ui;
-import 'dart:html' as html;
+import 'package:web/web.dart' as web;
+
+
 
 class OTPRequestScreen extends StatefulWidget {
   final String? prefilledEmail;
