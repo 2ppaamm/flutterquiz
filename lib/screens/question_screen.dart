@@ -73,43 +73,35 @@ class _QuestionScreenState extends State<QuestionScreen>
     _loadUserData();
   }
 
-// Update _reduceLives - same logic
   void _reduceLives() async {
-    final prefs = await SharedPreferences.getInstance();
+  final prefs = await SharedPreferences.getInstance();
 
-    // ✅ Check unlimited FIRST
-    final isUnlimited = prefs.getBool('unlimited') ?? false;
-    final isSubscriber = prefs.getBool('is_subscriber') ?? false;
+  // ✅ Check unlimited FIRST
+  final isUnlimited = prefs.getBool('unlimited') ?? false;
+  final isSubscriber = prefs.getBool('is_subscriber') ?? false;
 
-    // ✅ Exit immediately if unlimited or subscriber
-    if (isUnlimited || isSubscriber) {
-      return; // Don't reduce lives at all
-    }
-
-    // Only reduce lives for non-unlimited users
-    final currentLives = prefs.getInt('lives') ?? 5;
-    if (currentLives > 0) {
-      await prefs.setInt('lives', currentLives - 1);
-      setState(() {
-        lives = currentLives - 1;
-        unlimited = isUnlimited || isSubscriber;
-      });
-
-      if (lives <= 0) {
-        OutOfLivesModal.show(
-          context,
-          nextLifeInSeconds: _calculateNextLifeTime(),
-          onGoBack: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => BottomNavScreen()),
-            );
-          },
-        );
-      }
-    }
+  // ✅ Exit immediately if unlimited or subscriber
+  if (isUnlimited || isSubscriber) {
+    return; // Don't reduce lives at all
   }
 
+  // Only reduce lives for non-unlimited users
+  final currentLives = prefs.getInt('lives') ?? 5;
+  if (currentLives > 0) {
+    final newLives = currentLives - 1;
+    await prefs.setInt('lives', newLives);
+    setState(() {
+      lives = newLives;
+      unlimited = isUnlimited || isSubscriber;
+    });
+
+    // ✅ CRITICAL: If lives hit 0 AND this is a track test, submit results immediately
+    if (newLives <= 0 && widget.sessionType == 'track') {
+      // Send results to backend - this will handle showing modal or navigating
+      await _sendResults();
+    }
+  }
+}
   int _calculateNextLifeTime() {
     return 1800;
   }
@@ -1653,56 +1645,49 @@ class _QuestionScreenState extends State<QuestionScreen>
   }
 
   Widget _buildFeedbackArea() {
-    if (!hasAnswered) {
-      return const SizedBox.shrink();
-    }
-
-    final question = _getQuestionData(currentIndex);
-    final correctAnswer = question['correct_answer']?.toString();
-    final explanation = question['explanation']?.toString();
-    final userAnswer = _getUserAnswerDisplay();
-    final questionType = question['type'] as int? ?? 1; // Get question type
-
-    // For Type 1: Get the text of the correct option
-    String? correctOptionText;
-    if (questionType == 1) {
-      final answerOptions = question['answer_options'] as List?;
-      if (answerOptions != null) {
-        final correctOption = answerOptions.firstWhere(
-          (opt) => opt['is_correct'] == 1,
-          orElse: () => null,
-        );
-        correctOptionText = correctOption?['option_text']?.toString();
-      }
-    }
-
-    // For Type 2: Get all acceptable answers
-    List<String>? acceptableAnswers;
-    if (questionType == 2) {
-      acceptableAnswers = [
-        if (question['answer0']?.toString().isNotEmpty ?? false)
-          question['answer0'].toString(),
-        if (question['answer1']?.toString().isNotEmpty ?? false)
-          question['answer1'].toString(),
-        if (question['answer2']?.toString().isNotEmpty ?? false)
-          question['answer2'].toString(),
-        if (question['answer3']?.toString().isNotEmpty ?? false)
-          question['answer3'].toString(),
-      ];
-    }
-
-    return QuestionFeedbackWidget(
-      isCorrect: isCorrect,
-      userAnswer: userAnswer,
-      correctAnswer: correctAnswer,
-      explanation: explanation,
-      onReportIssue: _showReportDialog,
-      questionType: questionType,
-      correctOptionText: correctOptionText,
-      acceptableAnswers: acceptableAnswers,
-    );
+  if (!hasAnswered) {
+    return const SizedBox.shrink();
   }
 
+  final question = _getQuestionData(currentIndex);
+  final correctAnswerIndex = question['correct_answer'] as int? ?? 0; // Get the index
+  final explanation = question['explanation']?.toString();
+  final userAnswer = _getUserAnswerDisplay();
+  final questionType = question['type_id'] as int? ?? 1; // ✅ Use type_id
+
+  // ✅ FIXED: Get the correct answer text for MCQ
+  String? correctOptionText;
+  if (questionType == 1) {
+    // For MCQ, get the actual text of the correct answer
+    correctOptionText = question['answer$correctAnswerIndex']?.toString();
+  }
+
+  // For Type 2: Get all acceptable answers
+  List<String>? acceptableAnswers;
+  if (questionType == 2) {
+    acceptableAnswers = [
+      if (question['answer0']?.toString().isNotEmpty ?? false)
+        question['answer0'].toString(),
+      if (question['answer1']?.toString().isNotEmpty ?? false)
+        question['answer1'].toString(),
+      if (question['answer2']?.toString().isNotEmpty ?? false)
+        question['answer2'].toString(),
+      if (question['answer3']?.toString().isNotEmpty ?? false)
+        question['answer3'].toString(),
+    ];
+  }
+
+  return QuestionFeedbackWidget(
+    isCorrect: isCorrect,
+    userAnswer: userAnswer,
+    correctAnswer: correctAnswerIndex.toString(), // Still pass the index for compatibility
+    explanation: explanation,
+    onReportIssue: _showReportDialog,
+    questionType: questionType,
+    correctOptionText: correctOptionText, // ✅ Now has the actual text!
+    acceptableAnswers: acceptableAnswers,
+  );
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
