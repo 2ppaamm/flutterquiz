@@ -10,9 +10,8 @@ import '../services/question_service.dart';
 import 'question_screen.dart';
 import '../widgets/out_of_lives_modal.dart';
 import 'upgrade_screen.dart';
-import '../widgets/diagnostic_unavailable_dialog.dart'; 
+import '../widgets/diagnostic_unavailable_dialog.dart';
 import 'diagnostic/diagnostic_result_screen.dart';
-
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -126,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showDiagnosticRestrictionDialog() {
     // Calculate next available date from days remaining
     final nextDate = DateTime.now().add(Duration(days: _daysRemaining));
-    
+
     // Call dialog directly without helper function to avoid caching issues
     showDialog(
       context: context,
@@ -143,11 +142,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void _viewLastDiagnosticResults() async {
     final prefs = await SharedPreferences.getInstance();
     final lastResultJson = prefs.getString('last_diagnostic_result');
-    
+
     if (lastResultJson != null) {
       try {
         final lastResult = json.decode(lastResultJson);
-        
+
         if (lastResult != null && lastResult is Map<String, dynamic>) {
           Navigator.push(
             context,
@@ -433,7 +432,33 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              const SizedBox(height: 40),
+              const SizedBox(height: 16),
+
+              // ✅ Kudos display in top right
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Icon(
+                      Icons.monetization_on,
+                      color: Colors.amber,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$_kudos',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF374151),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
 
               // Avatar Placeholder
               Container(
@@ -633,7 +658,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            '$_streak day streak',
+                            '$_streak ${_streak < 2 ? 'day' : 'days'} streak',
                             style: AppFontStyles.bodyMedium.copyWith(
                               color: AppColors.darkGreyText,
                             ),

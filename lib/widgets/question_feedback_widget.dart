@@ -11,8 +11,10 @@ class QuestionFeedbackWidget extends StatelessWidget {
   final String? explanation;
   final VoidCallback onReportIssue;
   final int questionType; // 1 = multiple choice, 2 = fill in blank
-  final List<String>? acceptableAnswers; // For type 2 questions (answer0, answer1, answer2, answer3)
-  final String? correctOptionText; // For type 1 questions (the actual text of correct option)
+  final List<String>?
+      acceptableAnswers; // For type 2 questions (answer0, answer1, answer2, answer3)
+  final String?
+      correctOptionText; // For type 1 questions (the actual text of correct option)
 
   const QuestionFeedbackWidget({
     super.key,
@@ -27,15 +29,13 @@ class QuestionFeedbackWidget extends StatelessWidget {
   });
 
   @override
+  @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      padding: const EdgeInsets.all(16),
+    return Container(
+      margin: const EdgeInsets.all(0),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isCorrect
-            ? AppColors.success.withOpacity(0.1)
-            : AppColors.error.withOpacity(0.1),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isCorrect
@@ -49,15 +49,15 @@ class QuestionFeedbackWidget extends StatelessWidget {
         children: [
           _buildHeader(),
           if (!isCorrect) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildAnswerComparison(),
             if (explanation != null && explanation!.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               _buildExplanation(),
             ],
           ],
           if (isCorrect) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             _buildSuccessMessage(),
           ],
         ],
@@ -117,7 +117,7 @@ class QuestionFeedbackWidget extends StatelessWidget {
   /// Shows user's answer vs correct answer comparison
   Widget _buildAnswerComparison() {
     final formattedCorrectAnswer = _getFormattedCorrectAnswer();
-    
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -175,7 +175,9 @@ class QuestionFeedbackWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        questionType == 2 ? 'Acceptable answers:' : 'Correct answer:',
+                        questionType == 2
+                            ? 'Acceptable answers:'
+                            : 'Correct answer:',
                         style: AppFontStyles.caption.copyWith(
                           color: AppColors.darkGreyText,
                         ),

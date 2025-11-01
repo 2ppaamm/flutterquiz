@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/user_service.dart';
 import './auth/otp_request_screen.dart';
-import '../services/user_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -49,21 +48,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => isLoading = true);
 
     try {
-      // ✅ Use existing service method
       final response = await UserService.getUserInfo();
-
-      print('Profile response: $response'); // Debug log
 
       if (response != null && response['ok'] == true) {
         final user = response['user'] ?? {};
         final stats = response['stats'] ?? {};
         final progress = response['progress'] ?? {};
 
-        print('User data: $user'); // Debug log
-        print('Stats data: $stats'); // Debug log
-        print('Progress data: $progress'); // Debug log
-
-        // Helper function to safely parse int
         int parseInt(dynamic value) {
           if (value == null) return 0;
           if (value is int) return value;
@@ -72,7 +63,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return 0;
         }
 
-        // Helper function to safely parse double
         double parseDouble(dynamic value) {
           if (value == null) return 0.0;
           if (value is double) return value;
@@ -81,7 +71,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return 0.0;
         }
 
-        // Parse all values safely
         final parsedFirstName = user['firstname']?.toString() ?? 'Student';
         final parsedLastName = user['lastname']?.toString() ?? '';
         final parsedContact = user['contact']?.toString() ?? '';
@@ -102,7 +91,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final parsedSkillsMastered = parseInt(progress['skills_mastered']);
         final parsedTopicsPracticed = parseInt(progress['topics_practiced']);
 
-        // Save to SharedPreferences
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('first_name', parsedFirstName);
         await prefs.setString('last_name', parsedLastName);
@@ -123,11 +111,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await prefs.setInt('skills_mastered', parsedSkillsMastered);
         await prefs.setInt('topics_practiced', parsedTopicsPracticed);
 
-        print('Parsed kudos: $parsedKudos'); // Debug
-        print('Parsed streak: $parsedStreak'); // Debug
-        print('Parsed questions: $parsedTotalQuestions'); // Debug
-
-        // Update UI
         setState(() {
           firstName = parsedFirstName;
           lastName = parsedLastName;
@@ -150,11 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           topicsPracticed = parsedTopicsPracticed;
           isLoading = false;
         });
-
-        print('State updated - kudos: $kudos, streak: $streak'); // Debug
       } else {
-        print('Response was null or not ok'); // Debug
-        // Fallback to SharedPreferences
         final prefs = await SharedPreferences.getInstance();
         setState(() {
           firstName = prefs.getString('first_name') ?? 'Student';
@@ -180,7 +159,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       print('Error loading profile: $e');
-      print('Stack trace: ${StackTrace.current}'); // Debug
       setState(() => isLoading = false);
     }
   }
@@ -216,6 +194,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
           (route) => false,
         );
       }
+    }
+  }
+
+  Future<void> _navigateToEditProfile() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditProfileScreen(
+          firstName: firstName,
+          lastName: lastName,
+          contact: contact,
+          email: email,
+          dob: dob,
+        ),
+      ),
+    );
+
+    // Reload profile data if changes were saved
+    if (result == true) {
+      _loadProfileData();
     }
   }
 
@@ -510,19 +508,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Email (always show if exists)
           if (email.isNotEmpty) ...[
             _buildInfoRow('Email', email, Icons.email),
             const SizedBox(height: 12),
           ],
 
-          // Contact (always show if exists)
           if (contact.isNotEmpty) ...[
             _buildInfoRow('Contact', contact, Icons.phone),
             const SizedBox(height: 12),
           ],
 
-          // Show placeholder if both are empty
           if (email.isEmpty && contact.isEmpty) ...[
             _buildInfoRow('Email', 'Not provided', Icons.email),
             const SizedBox(height: 12),
@@ -612,11 +607,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Edit Profile coming soon!')),
-                );
-              },
+              onPressed: _navigateToEditProfile,
               icon: const Icon(Icons.edit),
               label: const Text('Edit Profile'),
               style: ElevatedButton.styleFrom(
@@ -708,6 +699,350 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// EDIT PROFILE SCREEN
+// ============================================================================
+
+class EditProfileScreen extends StatefulWidget {
+  final String firstName;
+  final String lastName;
+  final String contact;
+  final String email;
+  final String dob;
+
+  const EditProfileScreen({
+    super.key,
+    required this.firstName,
+    required this.lastName,
+    required this.contact,
+    required this.email,
+    required this.dob,
+  });
+
+  @override
+  State<EditProfileScreen> createState() => _EditProfileScreenState();
+}
+
+class _EditProfileScreenState extends State<EditProfileScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _firstNameController;
+  late TextEditingController _lastNameController;
+  late TextEditingController _contactController;
+  late TextEditingController _emailController;
+  late TextEditingController _dobController;
+
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _firstNameController = TextEditingController(text: widget.firstName);
+    _lastNameController = TextEditingController(text: widget.lastName);
+    _contactController = TextEditingController(text: widget.contact);
+    _emailController = TextEditingController(text: widget.email);
+    _dobController = TextEditingController(text: _formatDate(widget.dob));
+  }
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _contactController.dispose();
+    _emailController.dispose();
+    _dobController.dispose();
+    super.dispose();
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  String? _parseDateForApi(String dateStr) {
+    if (dateStr.isEmpty) return null;
+    try {
+      final parts = dateStr.split('/');
+      if (parts.length == 3) {
+        final day = int.parse(parts[0]);
+        final month = int.parse(parts[1]);
+        final year = int.parse(parts[2]);
+        final date = DateTime(year, month, day);
+        return date.toIso8601String().split('T')[0];
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
+  }
+
+  Future<void> _selectDate() async {
+    DateTime? initialDate;
+    try {
+      if (_dobController.text.isNotEmpty) {
+        final parts = _dobController.text.split('/');
+        if (parts.length == 3) {
+          initialDate = DateTime(
+            int.parse(parts[2]),
+            int.parse(parts[1]),
+            int.parse(parts[0]),
+          );
+        }
+      }
+    } catch (e) {
+      // Use default
+    }
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate ?? DateTime(2010, 1, 1),
+      firstDate: DateTime(1950),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF960000),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _dobController.text =
+            '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+      });
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final response = await UserService.updateUserInfo(
+        firstname: _firstNameController.text.trim(),
+        lastname: _lastNameController.text.trim(),
+        contact: _contactController.text.trim(),
+        email: _emailController.text.trim(),
+        dateOfBirth: _parseDateForApi(_dobController.text),
+      );
+
+      if (!mounted) return;
+
+      if (response != null && response['ok'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true); // Return true to indicate success
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response?['message'] ?? 'Failed to update profile'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF960000),
+        foregroundColor: Colors.white,
+        title: const Text('Edit Profile'),
+        elevation: 0,
+      ),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            // First Name
+            _buildTextField(
+              controller: _firstNameController,
+              label: 'First Name',
+              icon: Icons.person,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'First name is required';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Last Name
+            _buildTextField(
+              controller: _lastNameController,
+              label: 'Last Name',
+              icon: Icons.person_outline,
+            ),
+            const SizedBox(height: 16),
+
+            // Email
+            _buildTextField(
+              controller: _emailController,
+              label: 'Email',
+              icon: Icons.email,
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return null; // Email is optional
+                }
+                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                    .hasMatch(value)) {
+                  return 'Please enter a valid email';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Contact
+            _buildTextField(
+              controller: _contactController,
+              label: 'Contact Number',
+              icon: Icons.phone,
+              keyboardType: TextInputType.phone,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return null; // Contact is optional
+                }
+                if (value.length < 8) {
+                  return 'Please enter a valid contact number';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Date of Birth
+            _buildTextField(
+              controller: _dobController,
+              label: 'Date of Birth (DD/MM/YYYY)',
+              icon: Icons.cake,
+              readOnly: true,
+              onTap: _selectDate,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return null; // DOB is optional
+                }
+                if (!RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(value)) {
+                  return 'Please use DD/MM/YYYY format';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 32),
+
+            // Save Button
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _isSaving ? null : _saveProfile,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF960000),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  disabledBackgroundColor: Colors.grey[300],
+                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Save Changes',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+    bool readOnly = false,
+    VoidCallback? onTap,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      readOnly: readOnly,
+      onTap: onTap,
+      validator: validator,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: const Color(0xFF960000)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF960000), width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red),
+        ),
+        filled: true,
+        fillColor: Colors.white,
       ),
     );
   }

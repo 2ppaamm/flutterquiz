@@ -16,6 +16,9 @@ import '../widgets/common_question_widgets.dart';
 import 'bottom_nav_screen.dart';
 import '../../config.dart';
 import '../widgets/question_feedback_widget.dart';
+import '../widgets/question_feedback_area.dart';
+import '../widgets/help_resources_widget.dart';
+
 
 class QuestionScreen extends StatefulWidget {
   final int? trackId;
@@ -48,6 +51,8 @@ class _QuestionScreenState extends State<QuestionScreen>
   bool hasAnswered = false;
   bool isCorrect = false;
   String? selectedAnswer;
+  bool _helpResourcesVisible = false;
+  bool _hasUsedHints = false;
 
   final Map<int, TextEditingController> _blankControllers = {};
   int? _activeBlank;
@@ -74,34 +79,35 @@ class _QuestionScreenState extends State<QuestionScreen>
   }
 
   void _reduceLives() async {
-  final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
-  // ✅ Check unlimited FIRST
-  final isUnlimited = prefs.getBool('unlimited') ?? false;
-  final isSubscriber = prefs.getBool('is_subscriber') ?? false;
+    // ✅ Check unlimited FIRST
+    final isUnlimited = prefs.getBool('unlimited') ?? false;
+    final isSubscriber = prefs.getBool('is_subscriber') ?? false;
 
-  // ✅ Exit immediately if unlimited or subscriber
-  if (isUnlimited || isSubscriber) {
-    return; // Don't reduce lives at all
-  }
+    // ✅ Exit immediately if unlimited or subscriber
+    if (isUnlimited || isSubscriber) {
+      return; // Don't reduce lives at all
+    }
 
-  // Only reduce lives for non-unlimited users
-  final currentLives = prefs.getInt('lives') ?? 5;
-  if (currentLives > 0) {
-    final newLives = currentLives - 1;
-    await prefs.setInt('lives', newLives);
-    setState(() {
-      lives = newLives;
-      unlimited = isUnlimited || isSubscriber;
-    });
+    // Only reduce lives for non-unlimited users
+    final currentLives = prefs.getInt('lives') ?? 5;
+    if (currentLives > 0) {
+      final newLives = currentLives - 1;
+      await prefs.setInt('lives', newLives);
+      setState(() {
+        lives = newLives;
+        unlimited = isUnlimited || isSubscriber;
+      });
 
-    // ✅ CRITICAL: If lives hit 0 AND this is a track test, submit results immediately
-    if (newLives <= 0 && widget.sessionType == 'track') {
-      // Send results to backend - this will handle showing modal or navigating
-      await _sendResults();
+      // ✅ CRITICAL: If lives hit 0 AND this is a track test, submit results immediately
+      if (newLives <= 0 && widget.sessionType == 'track') {
+        // Send results to backend - this will handle showing modal or navigating
+        await _sendResults();
+      }
     }
   }
-}
+
   int _calculateNextLifeTime() {
     return 1800;
   }
@@ -259,7 +265,278 @@ class _QuestionScreenState extends State<QuestionScreen>
       ),
     );
   }
+// ==========================================
+// PART 3: Replace _showVideoDialog() method (around line 260)
+// ==========================================
+  void _showHelpResources() {
+    setState(() {
+      _helpResourcesVisible = !_helpResourcesVisible;
+    });
+  }
+  void _showUpgradeDialog(String feature) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.star, color: Color(0xFFFFD700), size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text('Upgrade to Premium', style: AppFontStyles.headingMedium),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Unlock $feature and more premium features:',
+            style: AppFontStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          _buildFeatureItem(Icons.play_circle_outline, 'Watch tutorial videos for every topic'),
+          _buildFeatureItem(Icons.favorite, 'Unlimited lives'),
+          _buildFeatureItem(Icons.trending_up, 'Advanced progress tracking'),
+          _buildFeatureItem(Icons.workspace_premium, 'Priority support'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Maybe Later', style: AppFontStyles.buttonSecondary),
+        ),
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Premium subscription coming soon!'),
+                backgroundColor: Color(0xFFFFD700),
+              ),
+            );
+          },
+          icon: Icon(Icons.star, size: 18),
+          label: Text('Upgrade Now'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Color(0xFFFFD700),
+            foregroundColor: AppColors.white,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+  Widget _buildFeatureItem(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.success, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(text, style: AppFontStyles.bodyMedium),
+          ),
+        ],
+      ),
+    );
+  }
+  Widget _buildHelpResourcesSection() {
+  final question = _getQuestionData(currentIndex);
+  final skill = question['skill'];
+  final hints = question['hints'] ?? [];
+  final videos = skill != null ? skill['videos'] : null;
 
+  return HelpResourcesWidget(
+    hints: hints,
+    videos: videos,
+    isSubscriber: unlimited,
+    onUpgrade: () => _showUpgradeDialog('video tutorials'),
+    onPlayVideo: (videoUrl, videoTitle) {
+      _playVideo(videoUrl, videoTitle);
+      setState(() {
+        _helpResourcesVisible = false;
+      });
+    },
+  );
+}
+
+// ==========================================
+// PART 4: Update _buildHeader() to add Help button (around line 540)
+// ==========================================
+  Widget _buildHeader() {
+    final progress = (currentIndex + 1) / widget.questions.length;
+    final question = _getQuestionData(currentIndex);
+
+    final skill = question['skill'];
+    final hints = question['hints'] ?? [];
+    final videos = skill != null ? skill['videos'] : null;
+    final hasHelpResources = hints.isNotEmpty || 
+                             (videos != null && videos is List && videos.isNotEmpty);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.black.withOpacity(0.05),
+            offset: const Offset(0, 2),
+            blurRadius: 4,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(Icons.close, size: 24, color: AppColors.darkGrey),
+                onPressed: _showExitDialog,
+              ),
+              const Spacer(),
+              
+              // Lives Header
+              if (!unlimited)
+                LivesHeader(
+                  lives: lives,
+                  maxLives: maxLives,
+                  unlimited: unlimited,
+                  nextLifeInSeconds: nextLifeInSeconds,
+                  onTimerUpdate: (remaining) {
+                    setState(() {
+                      nextLifeInSeconds = remaining;
+                    });
+                  },
+                ),
+              const SizedBox(width: 8),
+              
+              // Help Resources Button
+              if (hasHelpResources && !hasAnswered) // Only show before answering
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _helpResourcesVisible ? Icons.help : Icons.help_outline,
+                        size: 28,
+                        color: _helpResourcesVisible ? AppColors.darkRed : AppColors.darkGreyText,
+                      ),
+                      onPressed: _showHelpResources,
+                    ),
+                    // Show badge if hints available
+                    if (hints.isNotEmpty && !_hasUsedHints)
+                      Positioned(
+                        right: 6,
+                        top: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: AppColors.darkRed,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 18,
+                          ),
+                          child: Center(
+                            child: Text(
+                              hints.length.toString(),
+                              style: TextStyle(
+                                color: AppColors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          AnimatedBuilder(
+            animation: _progressAnimation,
+            builder: (context, child) {
+              return LinearProgressIndicator(
+                value: progress * _progressAnimation.value,
+                backgroundColor: AppColors.progressInactive,
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(AppColors.progressActive),
+                minHeight: 6,
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Question ${currentIndex + 1} of ${widget.questions.length}',
+            style:
+                AppFontStyles.caption.copyWith(color: AppColors.darkGreyText),
+          ),
+        ],
+      ),
+    );
+  }
+
+// ==========================================
+// PART 5: Add help resources section in build() method
+// Insert this AFTER _buildQuestion() and BEFORE _buildAnswerArea()
+// ==========================================
+
+// ==========================================
+// PART 7: Update _nextQuestion() to reset help resources
+// ==========================================
+  void _nextQuestion() {
+    if (currentIndex < widget.questions.length - 1) {
+      setState(() {
+        currentIndex++;
+        hasAnswered = false;
+        isCorrect = false;
+        selectedAnswer = null;
+        _clearBlankControllers();
+        
+        // ✅ ADD: Reset help resources for new question
+        _helpResourcesVisible = false;
+        _hasUsedHints = false;
+      });
+
+      _feedbackAnimationController.reset();
+      _initializeQuestion();
+      _progressAnimationController.reset();
+      _progressAnimationController.forward();
+    } else {
+      _finishQuestions();
+    }
+  }
+
+// ==========================================
+// PART 9: Keep _playVideo() method (it's still used)
+// This method remains unchanged
+// ==========================================
+  Future<void> _playVideo(String? videoLink, String videoTitle) async {
+    if (videoLink == null || videoLink.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Video link not available')),
+      );
+      return;
+    }
+
+    String fullUrl = videoLink;
+    if (!videoLink.startsWith('http://') && !videoLink.startsWith('https://')) {
+      fullUrl = '${AppConfig.apiBaseUrl}/$videoLink';
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _VideoPlayerScreen(
+          videoUrl: fullUrl,
+          title: videoTitle,
+        ),
+      ),
+    );
+  }
   Future<void> _submitReport(String reportType, String comment) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
@@ -435,30 +712,6 @@ class _QuestionScreenState extends State<QuestionScreen>
     );
   }
 
-  Future<void> _playVideo(String? videoLink, String videoTitle) async {
-    if (videoLink == null || videoLink.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Video link not available')),
-      );
-      return;
-    }
-
-    String fullUrl = videoLink;
-    if (!videoLink.startsWith('http://') && !videoLink.startsWith('https://')) {
-      fullUrl = '${AppConfig.apiBaseUrl}/$videoLink';
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _VideoPlayerScreen(
-          videoUrl: fullUrl,
-          title: videoTitle,
-        ),
-      ),
-    );
-  }
-
   void _showExitDialog() {
     showDialog(
       context: context,
@@ -483,113 +736,6 @@ class _QuestionScreenState extends State<QuestionScreen>
             child: Text('Exit',
                 style: AppFontStyles.buttonSecondary
                     .copyWith(color: AppColors.error)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ✅ UPDATED: LivesHeader inline (where flag was)
-  Widget _buildHeader() {
-    final progress = (currentIndex + 1) / widget.questions.length;
-    final question = _getQuestionData(currentIndex);
-
-    final skill = question['skill'];
-    final videos = skill != null ? skill['videos'] : null;
-    final hasVideo = videos != null && videos is List && videos.isNotEmpty;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.black.withOpacity(0.05),
-            offset: const Offset(0, 2),
-            blurRadius: 4,
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              IconButton(
-                icon: Icon(Icons.close, size: 24, color: AppColors.darkGrey),
-                onPressed: _showExitDialog,
-              ),
-              const Spacer(),
-              // ✅ LivesHeader inline (replaces flag button)
-              if (!unlimited)
-                LivesHeader(
-                  lives: lives,
-                  maxLives: maxLives,
-                  unlimited: unlimited,
-                  nextLifeInSeconds: nextLifeInSeconds,
-                  onTimerUpdate: (remaining) {
-                    setState(() {
-                      nextLifeInSeconds = remaining;
-                    });
-                  },
-                ),
-              const SizedBox(width: 8),
-              if (hasVideo)
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.play_circle_outline,
-                          size: 28, color: AppColors.darkRed),
-                      onPressed: _showVideoDialog,
-                    ),
-                    if (videos.length > 1)
-                      Positioned(
-                        right: 6,
-                        top: 6,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: AppColors.darkRed,
-                            shape: BoxShape.circle,
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
-                          ),
-                          child: Center(
-                            child: Text(
-                              videos.length.toString(),
-                              style: TextStyle(
-                                color: AppColors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          AnimatedBuilder(
-            animation: _progressAnimation,
-            builder: (context, child) {
-              return LinearProgressIndicator(
-                value: progress * _progressAnimation.value,
-                backgroundColor: AppColors.progressInactive,
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(AppColors.progressActive),
-                minHeight: 6,
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Question ${currentIndex + 1} of ${widget.questions.length}',
-            style:
-                AppFontStyles.caption.copyWith(color: AppColors.darkGreyText),
           ),
         ],
       ),
@@ -829,7 +975,6 @@ class _QuestionScreenState extends State<QuestionScreen>
     );
   }
 
-  // ✅ UPDATED: Removed progress boxes
   Widget _buildFIBWithImageLayout(
       Map<String, dynamic> question, String questionText) {
     // ✅ ADD THESE 5 LINES:
@@ -889,7 +1034,6 @@ class _QuestionScreenState extends State<QuestionScreen>
     );
   }
 
-  // ✅ UPDATED: Removed progress boxes
   Widget _buildFIBWithoutImageLayout(String questionText) {
     // ✅ ADD THESE 6 LINES:
     final currentQuestion = _getQuestionData(currentIndex);
@@ -1365,25 +1509,6 @@ class _QuestionScreenState extends State<QuestionScreen>
     });
   }
 
-  void _nextQuestion() {
-    if (currentIndex < widget.questions.length - 1) {
-      setState(() {
-        currentIndex++;
-        hasAnswered = false;
-        isCorrect = false;
-        selectedAnswer = null;
-        _clearBlankControllers();
-      });
-
-      _feedbackAnimationController.reset();
-      _initializeQuestion();
-      _progressAnimationController.reset();
-      _progressAnimationController.forward();
-    } else {
-      _finishQuestions();
-    }
-  }
-
   String _getNextButtonText() {
     return isCorrect ? 'Correct! Continue' : 'Continue';
   }
@@ -1645,76 +1770,116 @@ class _QuestionScreenState extends State<QuestionScreen>
   }
 
   Widget _buildFeedbackArea() {
-  if (!hasAnswered) {
-    return const SizedBox.shrink();
+    if (!hasAnswered) {
+      return const SizedBox.shrink();
+    }
+
+    return QuestionFeedbackArea(
+      isCorrect: isCorrect,
+      question: _getQuestionData(currentIndex),
+      userAnswer: _getUserAnswerDisplay(),
+      onReportIssue: _showReportDialog,
+      onShowVideos: _showVideoDialog,
+      unlimited: unlimited,
+      checkIsSubscriber: _isUnlimitedUser,
+    );
   }
 
-  final question = _getQuestionData(currentIndex);
-  final correctAnswerIndex = question['correct_answer'] as int? ?? 0; // Get the index
-  final explanation = question['explanation']?.toString();
-  final userAnswer = _getUserAnswerDisplay();
-  final questionType = question['type_id'] as int? ?? 1; // ✅ Use type_id
-
-  // ✅ FIXED: Get the correct answer text for MCQ
-  String? correctOptionText;
-  if (questionType == 1) {
-    // For MCQ, get the actual text of the correct answer
-    correctOptionText = question['answer$correctAnswerIndex']?.toString();
-  }
-
-  // For Type 2: Get all acceptable answers
-  List<String>? acceptableAnswers;
-  if (questionType == 2) {
-    acceptableAnswers = [
-      if (question['answer0']?.toString().isNotEmpty ?? false)
-        question['answer0'].toString(),
-      if (question['answer1']?.toString().isNotEmpty ?? false)
-        question['answer1'].toString(),
-      if (question['answer2']?.toString().isNotEmpty ?? false)
-        question['answer2'].toString(),
-      if (question['answer3']?.toString().isNotEmpty ?? false)
-        question['answer3'].toString(),
-    ];
-  }
-
-  return QuestionFeedbackWidget(
-    isCorrect: isCorrect,
-    userAnswer: userAnswer,
-    correctAnswer: correctAnswerIndex.toString(), // Still pass the index for compatibility
-    explanation: explanation,
-    onReportIssue: _showReportDialog,
-    questionType: questionType,
-    correctOptionText: correctOptionText, // ✅ Now has the actual text!
-    acceptableAnswers: acceptableAnswers,
-  );
-}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 20),
-                    _buildQuestion(),
-                    const SizedBox(height: 24),
-                    _buildAnswerArea(),
-                    _buildFeedbackArea(),
-                    const SizedBox(height: 32),
-                  ],
+            // Main content
+            Column(
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 20),
+                        _buildQuestion(),
+                        
+                        // ✅ ADD THIS: Help Resources Section
+                        if (!hasAnswered && _helpResourcesVisible)
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                            child: _buildHelpResourcesSection(),
+                          ),
+                        
+                        const SizedBox(height: 24),
+                        _buildAnswerArea(),
+                        SizedBox(height: hasAnswered ? 320 : 32),
+                      ],
+                    ),
+                  ),
+                ),
+                if (!hasAnswered)
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: _buildActionButton(),
+                  ),
+              ],
+            ),
+
+            // Feedback overlay (existing code remains the same)
+            if (hasAnswered)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.55,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isCorrect
+                        ? AppColors.success.withOpacity(0.1)
+                        : AppColors.error.withOpacity(0.1),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(16)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, -5),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: _buildFeedbackArea(),
+                        ),
+                      ),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                        decoration: BoxDecoration(
+                          color: isCorrect
+                              ? AppColors.success.withOpacity(0.1)
+                              : AppColors.error.withOpacity(0.1),
+                        ),
+                        child: ElevatedButton(
+                          onPressed: _nextQuestion,
+                          style: isCorrect
+                              ? AppButtonStyles.questionCorrect
+                              : AppButtonStyles.questionNext,
+                          child: Text(_getNextButtonText()),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: _buildActionButton(),
-            ),
           ],
         ),
       ),

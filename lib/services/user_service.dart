@@ -9,7 +9,7 @@ class UserService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
-      
+
       if (token == null || token.isEmpty) {
         print('No auth token found');
         return null;
@@ -45,7 +45,7 @@ class UserService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
-      
+
       if (token == null || token.isEmpty) {
         print('No auth token found');
         return null;
@@ -82,7 +82,7 @@ class UserService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
-      
+
       if (token == null || token.isEmpty) {
         return null;
       }
@@ -110,6 +110,43 @@ class UserService {
       }
     } catch (e) {
       print('Exception in updateProfile: $e');
+      return null;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> updateUserInfo({
+    String? firstname,
+    String? lastname,
+    String? contact,
+    String? email,
+    String? dateOfBirth,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      if (token == null) {
+        return {'ok': false, 'message': 'Not authenticated'};
+      }
+
+      final response = await http.put(
+        Uri.parse('$AppConfig.apibaseURL/api/user/update'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          if (firstname != null) 'firstname': firstname,
+          if (lastname != null) 'lastname': lastname,
+          if (contact != null) 'contact': contact,
+          if (email != null) 'email': email,
+          if (dateOfBirth != null) 'date_of_birth': dateOfBirth,
+        }),
+      );
+
+      return json.decode(response.body);
+    } catch (e) {
+      print('Error updating user info: $e');
       return null;
     }
   }

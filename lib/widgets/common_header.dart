@@ -1,5 +1,6 @@
 // lib/widgets/common_header.dart
 import 'package:flutter/material.dart';
+import '../screens/bottom_nav_screen.dart';
 
 class CommonHeader extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -15,19 +16,24 @@ class CommonHeader extends StatelessWidget implements PreferredSizeWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0), // ✅ Added margins around logo
-            child: Image.asset(
-              'assets/logo.png',
-              height: 35,
+          GestureDetector(
+            onTap: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const BottomNavScreen()),
+                (route) => false, // Removes all previous routes
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Image.asset(
+                'assets/logo.png',
+                height: 35,
+              ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.menu, color: Color(0xFF960000)),
-            onPressed: () {
-              // TODO: Menu logic
-            },
-          ),
+          // Hamburger menu removed - empty space to maintain layout
+          const SizedBox(width: 48), // Matches IconButton width for symmetry
         ],
       ),
     );
